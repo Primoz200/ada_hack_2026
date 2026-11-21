@@ -1,4 +1,5 @@
 """Shared fixtures: every test gets a fresh in-memory database and a fixed "today"."""
+import os
 from datetime import date
 
 import pytest
@@ -10,6 +11,9 @@ from app.seed.pathways import fresh_clinicians, fresh_pathways
 from app.services import clock
 
 TODAY = date(2026, 11, 21)
+
+# the app lifespan reseeds on every start; tests build their own data and keep it
+os.environ["APP_KEEP_DB"] = "1"
 
 
 @pytest.fixture(autouse=True)
