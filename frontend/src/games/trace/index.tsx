@@ -198,6 +198,9 @@ function TraceCanvas({ config, onComplete, level }: GameProps & { level: TraceLe
     () => () => {
       if (timer.current) clearTimeout(timer.current)
       if (raf.current !== undefined) cancelAnimationFrame(raf.current)
+      // Reset, or React StrictMode's mount/unmount/mount leaves a cancelled id here and
+      // requestDraw never schedules again (blank canvas).
+      raf.current = undefined
     },
     [],
   )
