@@ -16,9 +16,6 @@ class Pathway(SQLModel, table=True):
     frequency: str  # human readable, e.g. "vsak dan"
     games: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     questions: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    warning_signs: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    # symptom question ids whose expected early pattern must not raise an alert on its own
-    muted_patterns: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
 
 
 class Patient(SQLModel, table=True):
@@ -44,13 +41,8 @@ class Checkin(SQLModel, table=True):
     patient_id: str = Field(foreign_key="patient.id", index=True)
     day: date = Field(index=True)
     created_at: datetime
-    # ids of warning signs answered "yes" (empty list = none)
-    warning_signs: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    # question id -> numeric answer (yes/no stored as 1/0)
+    # {"wellbeing": 1-10 (higher = better), "pain": 1-10 (higher = worse)}
     answers: dict[str, float] = Field(default_factory=dict, sa_column=Column(JSON))
-    concern: str = "none"  # "none" | "little" | "call"
-    concern_text: Optional[str] = None
-    answered_by: str = "self"  # "self" | "assisted" | "relative"
 
 
 class GameSession(SQLModel, table=True):
@@ -119,11 +111,3 @@ class Alert(SQLModel, table=True):
     outcome: Optional[str] = None
     note: Optional[str] = None
 
-
-class Message(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    patient_id: str = Field(foreign_key="patient.id", index=True)
-    direction: str  # "to_patient" | "system"
-    author: Optional[str] = None  # clinician name for to_patient
-    text: str
-    created_at: datetime

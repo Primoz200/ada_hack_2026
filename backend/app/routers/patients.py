@@ -1,12 +1,12 @@
 """Read path for patients. Phase 0: minimal bodies; agent B completes them."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
 from app.deps import Db, require_patient
-from app.models import Checkin, GameSession, Message, Pathway, Patient, TrendSnapshot, Alert
+from app.models import Alert, Checkin, GameSession, Pathway, Patient, TrendSnapshot
 from app.models.schemas import (
-    CheckinOut, MessageOut, PatientDetail, PatientListItem, PatientListOut, PatientSummary,
-    ProgressOut, ProgressPoint, SessionSummary, SparkPoint, TimelineOut, TodayOut, TodayTask, TrendPoint, TriageCounters,
+    CheckinOut, PatientDetail, PatientHomeOut, PatientListItem, PatientListOut, PatientSummary, ProgressOut,
+    ProgressPoint, SelfcheckSummary, SessionSummary, SparkPoint, TimelineOut, TrendPoint, TriageCounters,
 )
 from app.services import alerts, clock, queries
 
@@ -82,46 +82,20 @@ def get_timeline(patient_id: str, db: Db):
         messages=[MessageOut.model_validate(m) for m in messages])
 
 
-@router.get("/{patient_id}/today", response_model=TodayOut, operation_id="getToday")
-def get_today(patient_id: str, db: Db):
-    p = require_patient(db, patient_id)
-    today = clock.today()
-    pathway = db.get(Pathway, p.pathway_code)
-    done_levels = {(s.game_type, s.level) for s in db.exec(
-        select(GameSession).where(GameSession.patient_id == p.id, GameSession.day == today,
-                                  GameSession.completed == True)).all()}  # noqa: E712
-    s_days, c_days, _, _ = queries.entry_days(db, p.id)
-    all_days = s_days | c_days
-    tasks = [TodayTask(id="checkin", kind="checkin", title="Kako ste danes?", done=today in c_days)]
-    for game in pathway.games:
-        for level in game["levels"]:
-            tasks.append(TodayTask(
-                id=f"{game['gameType']}:{level}", kind="game", title=game["title"],
-                game_type=game["gameType"], level=level,
-                done=(game["gameType"], level) in done_levels))
-    msgs = db.exec(select(Message).where(Message.patient_id == p.id)
-                   .order_by(Message.created_at.desc(), Message.id.desc())).all()
-    last = next((m for m in msgs if m.direction == "to_patient"), None) or (msgs[0] if msgs else None)
-    missed = (today - (max(all_days) if all_days else p.discharge_date)).days
-    reminder = ("Pogrešali smo vas. Ko boste lahko, opravite današnje naloge."
-                if missed >= alerts.REMINDER_AFTER_MISSED_DAYS else None)
-    return TodayOut(
-        patient_id=p.id, name=p.name, pathway_code=p.pathway_code, hand=p.side, today=today, tasks=tasks,
-        streak_days=queries.streak(all_days, today), week_done=queries.days_with_entry(all_days, today, 7),
-        last_message=MessageOut.model_validate(last) if last else None, reminder=reminder,
-        clinician_reviewed_at=queries.latest_review(db, p.id))
+@router.get("/{patient_id}/home", response_model=PatientHomeOut, operation_id="getPatientHome")
+def get_home(patient_id: str, db: Db):
+    """Patient landing page: name and today's self-check steps."""
+    raise HTTPException(501, "Ni še implementirano")
+
+
+@router.get("/{patient_id}/selfcheck/summary", response_model=SelfcheckSummary,
+            operation_id="getSelfcheckSummary")
+def get_selfcheck_summary(patient_id: str, db: Db):
+    """How today's self-check went compared with previous days (shown at the end)."""
+    raise HTTPException(501, "Ni še implementirano")
 
 
 @router.get("/{patient_id}/progress", response_model=ProgressOut, operation_id="getProgress")
 def get_progress(patient_id: str, db: Db):
-    p = require_patient(db, patient_id)
-    today = clock.today()
-    snaps = queries.combined_snapshots(db, p.id)
-    points = [ProgressPoint(day=s.day, value=s.delta,
-                            label="lower" if s.delta <= -5 else "better" if s.delta >= 5 else "usual")
-              for s in snaps]
-    best = max(snaps, key=lambda s: s.delta).day if snaps else None
-    s_days, c_days, _, _ = queries.entry_days(db, p.id)
-    return ProgressOut(patient_id=p.id, points=points, personal_best_day=best,
-                       week_done=queries.days_with_entry(s_days | c_days, today, 7), week_goal=5,
-                       clinician_reviewed_at=queries.latest_review(db, p.id))
+    """"Moj napredek": a very simple dashboard."""
+    raise HTTPException(501, "Ni še implementirano")

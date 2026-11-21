@@ -9,7 +9,6 @@ from sqlmodel import Session, select
 
 from app.models import Alert, Checkin, GameSession, Pathway, Patient, TrendSnapshot
 from app.models.schemas import AlertOut, PathwayOut
-from app.seed.pathways import WARNING_PROMPTS
 from app.services import alerts as alert_rules
 from app.services import divergence
 
@@ -17,8 +16,7 @@ from app.services import divergence
 def pathway_out(p: Pathway) -> PathwayOut:
     return PathwayOut.model_validate({
         "code": p.code, "name": p.name, "frequency": p.frequency, "games": p.games,
-        "questions": p.questions, "warningSigns": p.warning_signs,
-        "warningSignsPrompt": WARNING_PROMPTS.get(p.code, "Ali opažate kaj od naštetega?"),
+        "questions": p.questions,
     })
 
 

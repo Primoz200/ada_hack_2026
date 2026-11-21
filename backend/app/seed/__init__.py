@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from sqlmodel import Session, select
 
 from app import db as dbmod
-from app.models import Message, Patient
+from app.models import Patient
 from app.models.schemas import CheckinIn, ClientMeta, SessionIn
 from app.seed import stories as st
 from app.seed.pathways import fresh_clinicians, fresh_pathways

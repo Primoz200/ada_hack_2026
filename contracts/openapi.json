@@ -214,102 +214,41 @@
         "type": "object"
       },
       "CheckinIn": {
+        "description": "The two ratings at the start of a self-check.",
         "properties": {
-          "answeredBy": {
-            "default": "self",
-            "enum": [
-              "self",
-              "assisted",
-              "relative"
-            ],
-            "title": "Answeredby",
-            "type": "string"
-          },
-          "answers": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "default": {},
-            "title": "Answers",
-            "type": "object"
-          },
-          "concern": {
-            "default": "none",
-            "enum": [
-              "none",
-              "little",
-              "call"
-            ],
-            "title": "Concern",
-            "type": "string"
-          },
-          "concernText": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Concerntext"
+          "pain": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Pain",
+            "type": "integer"
           },
           "patientId": {
             "title": "Patientid",
             "type": "string"
           },
-          "warningSigns": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Warningsigns",
-            "type": "array"
+          "wellbeing": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Wellbeing",
+            "type": "integer"
           }
         },
         "required": [
-          "patientId"
+          "patientId",
+          "wellbeing",
+          "pain"
         ],
         "title": "CheckinIn",
         "type": "object"
       },
       "CheckinOut": {
         "properties": {
-          "answeredBy": {
-            "enum": [
-              "self",
-              "assisted",
-              "relative"
-            ],
-            "title": "Answeredby",
-            "type": "string"
-          },
           "answers": {
             "additionalProperties": {
               "type": "number"
             },
             "title": "Answers",
             "type": "object"
-          },
-          "concern": {
-            "enum": [
-              "none",
-              "little",
-              "call"
-            ],
-            "title": "Concern",
-            "type": "string"
-          },
-          "concernText": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Concerntext"
           },
           "createdAt": {
             "title": "Createdat",
@@ -327,13 +266,6 @@
           "patientId": {
             "title": "Patientid",
             "type": "string"
-          },
-          "warningSigns": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Warningsigns",
-            "type": "array"
           }
         },
         "required": [
@@ -341,11 +273,7 @@
           "patientId",
           "day",
           "createdAt",
-          "warningSigns",
-          "answers",
-          "concern",
-          "concernText",
-          "answeredBy"
+          "answers"
         ],
         "title": "CheckinOut",
         "type": "object"
@@ -355,30 +283,9 @@
           "checkinId": {
             "title": "Checkinid",
             "type": "integer"
-          },
-          "messageLevel": {
-            "enum": [
-              "thanks",
-              "neutral",
-              "call_clinic",
-              "call_112"
-            ],
-            "title": "Messagelevel",
-            "type": "string"
-          },
-          "messageText": {
-            "title": "Messagetext",
-            "type": "string"
-          },
-          "messageTitle": {
-            "title": "Messagetitle",
-            "type": "string"
           }
         },
         "required": [
-          "messageLevel",
-          "messageTitle",
-          "messageText",
           "checkinId"
         ],
         "title": "CheckinResult",
@@ -458,79 +365,6 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "MessageIn": {
-        "properties": {
-          "clinicianId": {
-            "title": "Clinicianid",
-            "type": "string"
-          },
-          "patientId": {
-            "title": "Patientid",
-            "type": "string"
-          },
-          "text": {
-            "maxLength": 1000,
-            "minLength": 1,
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "patientId",
-          "clinicianId",
-          "text"
-        ],
-        "title": "MessageIn",
-        "type": "object"
-      },
-      "MessageOut": {
-        "properties": {
-          "author": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Author"
-          },
-          "createdAt": {
-            "title": "Createdat",
-            "type": "string"
-          },
-          "direction": {
-            "enum": [
-              "to_patient",
-              "system"
-            ],
-            "title": "Direction",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "patientId": {
-            "title": "Patientid",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "patientId",
-          "direction",
-          "text",
-          "createdAt"
-        ],
-        "title": "MessageOut",
-        "type": "object"
-      },
       "MetaOut": {
         "properties": {
           "clinicians": {
@@ -539,6 +373,10 @@
             },
             "title": "Clinicians",
             "type": "array"
+          },
+          "defaultPatientId": {
+            "title": "Defaultpatientid",
+            "type": "string"
           },
           "modelVersion": {
             "title": "Modelversion",
@@ -566,7 +404,8 @@
           "today",
           "clinicians",
           "outcomes",
-          "modelVersion"
+          "modelVersion",
+          "defaultPatientId"
         ],
         "title": "MetaOut",
         "type": "object"
@@ -630,17 +469,6 @@
             },
             "title": "Questions",
             "type": "array"
-          },
-          "warningSigns": {
-            "items": {
-              "$ref": "#/components/schemas/WarningSign"
-            },
-            "title": "Warningsigns",
-            "type": "array"
-          },
-          "warningSignsPrompt": {
-            "title": "Warningsignsprompt",
-            "type": "string"
           }
         },
         "required": [
@@ -648,9 +476,7 @@
           "name",
           "frequency",
           "games",
-          "questions",
-          "warningSigns",
-          "warningSignsPrompt"
+          "questions"
         ],
         "title": "PathwayOut",
         "type": "object"
@@ -769,12 +595,77 @@
         "title": "PatientDetail",
         "type": "object"
       },
+      "PatientHomeOut": {
+        "properties": {
+          "hand": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Hand",
+            "type": "string"
+          },
+          "lastSelfcheckDay": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastselfcheckday"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pathwayCode": {
+            "title": "Pathwaycode",
+            "type": "string"
+          },
+          "pathwayName": {
+            "title": "Pathwayname",
+            "type": "string"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "selfcheckDoneToday": {
+            "title": "Selfcheckdonetoday",
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SelfcheckStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          }
+        },
+        "required": [
+          "patientId",
+          "name",
+          "pathwayCode",
+          "pathwayName",
+          "hand",
+          "today",
+          "steps",
+          "selfcheckDoneToday",
+          "lastSelfcheckDay"
+        ],
+        "title": "PatientHomeOut",
+        "type": "object"
+      },
       "PatientListItem": {
         "properties": {
-          "checkins7d": {
-            "title": "Checkins7D",
-            "type": "integer"
-          },
           "daysSinceDischarge": {
             "title": "Dayssincedischarge",
             "type": "integer"
@@ -793,6 +684,13 @@
           "diverging": {
             "title": "Diverging",
             "type": "boolean"
+          },
+          "gameSparkline": {
+            "items": {
+              "$ref": "#/components/schemas/SparkPoint"
+            },
+            "title": "Gamesparkline",
+            "type": "array"
           },
           "id": {
             "title": "Id",
@@ -837,13 +735,6 @@
             "title": "Side",
             "type": "string"
           },
-          "sparkline": {
-            "items": {
-              "$ref": "#/components/schemas/SparkPoint"
-            },
-            "title": "Sparkline",
-            "type": "array"
-          },
           "status": {
             "enum": [
               "red",
@@ -854,6 +745,13 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "wellbeingSparkline": {
+            "items": {
+              "$ref": "#/components/schemas/SparkPoint"
+            },
+            "title": "Wellbeingsparkline",
+            "type": "array"
           }
         },
         "required": [
@@ -866,8 +764,8 @@
           "status",
           "reason",
           "diverging",
-          "sparkline",
-          "checkins7d",
+          "gameSparkline",
+          "wellbeingSparkline",
           "daysToNextVisit",
           "openAlertId",
           "isDemo"
@@ -969,6 +867,7 @@
         "type": "object"
       },
       "ProgressOut": {
+        "description": "\"Moj napredek\": a very simple dashboard.",
         "properties": {
           "clinicianReviewedAt": {
             "anyOf": [
@@ -1004,6 +903,41 @@
             "title": "Points",
             "type": "array"
           },
+          "ratings": {
+            "items": {
+              "$ref": "#/components/schemas/RatingPoint"
+            },
+            "title": "Ratings",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "first",
+              "better",
+              "similar",
+              "lower"
+            ],
+            "title": "Tone",
+            "type": "string"
+          },
+          "trend": {
+            "enum": [
+              "improving",
+              "stable",
+              "declining",
+              "unknown"
+            ],
+            "title": "Trend",
+            "type": "string"
+          },
           "weekDone": {
             "title": "Weekdone",
             "type": "integer"
@@ -1014,8 +948,13 @@
           }
         },
         "required": [
+          "tone",
+          "trend",
+          "title",
+          "text",
           "patientId",
           "points",
+          "ratings",
           "personalBestDay",
           "weekDone",
           "weekGoal",
@@ -1054,6 +993,7 @@
         "type": "object"
       },
       "Question": {
+        "description": "A daily rating. v8: every pathway has `wellbeing` and `pain`, both 1-10.",
         "properties": {
           "higherIsWorse": {
             "default": true,
@@ -1065,17 +1005,13 @@
             "type": "string"
           },
           "kind": {
-            "enum": [
-              "faces5",
-              "scale",
-              "yes_no",
-              "count"
-            ],
+            "const": "scale",
+            "default": "scale",
             "title": "Kind",
             "type": "string"
           },
           "max": {
-            "default": 1,
+            "default": 10,
             "title": "Max",
             "type": "integer"
           },
@@ -1091,7 +1027,7 @@
             "title": "Maxlabel"
           },
           "min": {
-            "default": 0,
+            "default": 1,
             "title": "Min",
             "type": "integer"
           },
@@ -1106,6 +1042,10 @@
             ],
             "title": "Minlabel"
           },
+          "shortLabel": {
+            "title": "Shortlabel",
+            "type": "string"
+          },
           "text": {
             "title": "Text",
             "type": "string"
@@ -1113,10 +1053,48 @@
         },
         "required": [
           "id",
-          "kind",
-          "text"
+          "text",
+          "shortLabel"
         ],
         "title": "Question",
+        "type": "object"
+      },
+      "RatingPoint": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "pain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pain"
+          },
+          "wellbeing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wellbeing"
+          }
+        },
+        "required": [
+          "day",
+          "wellbeing",
+          "pain"
+        ],
+        "title": "RatingPoint",
         "type": "object"
       },
       "ResetOut": {
@@ -1135,6 +1113,136 @@
           "patients"
         ],
         "title": "ResetOut",
+        "type": "object"
+      },
+      "SelfcheckStep": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          },
+          "gameType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "trace",
+                  "camera_tapping",
+                  "camera_reach",
+                  "motion"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gametype"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ratings",
+              "game"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "done"
+        ],
+        "title": "SelfcheckStep",
+        "type": "object"
+      },
+      "SelfcheckSummary": {
+        "description": "Shown once at the end of the self-check: how it went compared with previous days.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "levelsDone": {
+            "title": "Levelsdone",
+            "type": "integer"
+          },
+          "levelsTotal": {
+            "title": "Levelstotal",
+            "type": "integer"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "first",
+              "better",
+              "similar",
+              "lower"
+            ],
+            "title": "Tone",
+            "type": "string"
+          },
+          "trend": {
+            "enum": [
+              "improving",
+              "stable",
+              "declining",
+              "unknown"
+            ],
+            "title": "Trend",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "trend",
+          "title",
+          "text",
+          "patientId",
+          "day",
+          "levelsDone",
+          "levelsTotal",
+          "points"
+        ],
+        "title": "SelfcheckSummary",
         "type": "object"
       },
       "SessionIn": {
@@ -1290,41 +1398,8 @@
       },
       "SessionResult": {
         "properties": {
-          "comparedToUsual": {
-            "enum": [
-              "first",
-              "better",
-              "similar",
-              "lower",
-              "not_scored"
-            ],
-            "title": "Comparedtousual",
-            "type": "string"
-          },
-          "messageLevel": {
-            "enum": [
-              "thanks",
-              "neutral",
-              "call_clinic",
-              "call_112"
-            ],
-            "title": "Messagelevel",
-            "type": "string"
-          },
-          "messageText": {
-            "title": "Messagetext",
-            "type": "string"
-          },
-          "messageTitle": {
-            "title": "Messagetitle",
-            "type": "string"
-          },
-          "offerRetry": {
-            "title": "Offerretry",
-            "type": "boolean"
-          },
-          "personalBest": {
-            "title": "Personalbest",
+          "scored": {
+            "title": "Scored",
             "type": "boolean"
           },
           "sessionId": {
@@ -1333,13 +1408,8 @@
           }
         },
         "required": [
-          "messageLevel",
-          "messageTitle",
-          "messageText",
           "sessionId",
-          "comparedToUsual",
-          "offerRetry",
-          "personalBest"
+          "scored"
         ],
         "title": "SessionResult",
         "type": "object"
@@ -1481,60 +1551,6 @@
         "title": "SessionSummary",
         "type": "object"
       },
-      "SimulateIn": {
-        "properties": {
-          "days": {
-            "default": 7,
-            "maximum": 30.0,
-            "minimum": 1.0,
-            "title": "Days",
-            "type": "integer"
-          },
-          "patientId": {
-            "title": "Patientid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "patientId"
-        ],
-        "title": "SimulateIn",
-        "type": "object"
-      },
-      "SimulateOut": {
-        "properties": {
-          "checkinsAdded": {
-            "title": "Checkinsadded",
-            "type": "integer"
-          },
-          "daysAdded": {
-            "title": "Daysadded",
-            "type": "integer"
-          },
-          "patientId": {
-            "title": "Patientid",
-            "type": "string"
-          },
-          "sessionsAdded": {
-            "title": "Sessionsadded",
-            "type": "integer"
-          },
-          "today": {
-            "format": "date",
-            "title": "Today",
-            "type": "string"
-          }
-        },
-        "required": [
-          "patientId",
-          "daysAdded",
-          "sessionsAdded",
-          "checkinsAdded",
-          "today"
-        ],
-        "title": "SimulateOut",
-        "type": "object"
-      },
       "SparkPoint": {
         "properties": {
           "day": {
@@ -1582,13 +1598,6 @@
             "title": "Dischargedate",
             "type": "string"
           },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/MessageOut"
-            },
-            "title": "Messages",
-            "type": "array"
-          },
           "nextVisitDate": {
             "anyOf": [
               {
@@ -1633,161 +1642,9 @@
           "sessions",
           "checkins",
           "trends",
-          "alerts",
-          "messages"
+          "alerts"
         ],
         "title": "TimelineOut",
-        "type": "object"
-      },
-      "TodayOut": {
-        "properties": {
-          "clinicianReviewedAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Clinicianreviewedat"
-          },
-          "hand": {
-            "enum": [
-              "left",
-              "right"
-            ],
-            "title": "Hand",
-            "type": "string"
-          },
-          "lastMessage": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MessageOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "pathwayCode": {
-            "title": "Pathwaycode",
-            "type": "string"
-          },
-          "patientId": {
-            "title": "Patientid",
-            "type": "string"
-          },
-          "reminder": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reminder"
-          },
-          "streakDays": {
-            "title": "Streakdays",
-            "type": "integer"
-          },
-          "tasks": {
-            "items": {
-              "$ref": "#/components/schemas/TodayTask"
-            },
-            "title": "Tasks",
-            "type": "array"
-          },
-          "today": {
-            "format": "date",
-            "title": "Today",
-            "type": "string"
-          },
-          "weekDone": {
-            "title": "Weekdone",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "patientId",
-          "name",
-          "pathwayCode",
-          "hand",
-          "today",
-          "tasks",
-          "streakDays",
-          "weekDone",
-          "lastMessage",
-          "reminder",
-          "clinicianReviewedAt"
-        ],
-        "title": "TodayOut",
-        "type": "object"
-      },
-      "TodayTask": {
-        "properties": {
-          "done": {
-            "title": "Done",
-            "type": "boolean"
-          },
-          "gameType": {
-            "anyOf": [
-              {
-                "enum": [
-                  "trace",
-                  "camera_tapping",
-                  "camera_reach",
-                  "motion"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Gametype"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "enum": [
-              "checkin",
-              "game"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "level": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Level"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "title",
-          "done"
-        ],
-        "title": "TodayTask",
         "type": "object"
       },
       "TrendPoint": {
@@ -1940,33 +1797,6 @@
         ],
         "title": "ValidationError",
         "type": "object"
-      },
-      "WarningSign": {
-        "properties": {
-          "action": {
-            "enum": [
-              "call_112",
-              "call_clinic"
-            ],
-            "title": "Action",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "text",
-          "action"
-        ],
-        "title": "WarningSign",
-        "type": "object"
       }
     }
   },
@@ -1993,47 +1823,6 @@
           }
         },
         "summary": "Reset Demo",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/api/admin/simulate": {
-      "post": {
-        "operationId": "simulateDays",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SimulateIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SimulateOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Simulate Days",
         "tags": [
           "admin"
         ]
@@ -2184,47 +1973,6 @@
         ]
       }
     },
-    "/api/messages": {
-      "post": {
-        "operationId": "createMessage",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MessageIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Message",
-        "tags": [
-          "messages"
-        ]
-      }
-    },
     "/api/meta": {
       "get": {
         "operationId": "getMeta",
@@ -2334,8 +2082,52 @@
         ]
       }
     },
+    "/api/patients/{patient_id}/home": {
+      "get": {
+        "description": "Patient landing page: name and today's self-check steps.",
+        "operationId": "getPatientHome",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientHomeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Home",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
     "/api/patients/{patient_id}/progress": {
       "get": {
+        "description": "\"Moj napredek\": a very simple dashboard.",
         "operationId": "getProgress",
         "parameters": [
           {
@@ -2371,6 +2163,49 @@
           }
         },
         "summary": "Get Progress",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
+    "/api/patients/{patient_id}/selfcheck/summary": {
+      "get": {
+        "description": "How today's self-check went compared with previous days (shown at the end).",
+        "operationId": "getSelfcheckSummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfcheckSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Selfcheck Summary",
         "tags": [
           "patients"
         ]
@@ -2413,48 +2248,6 @@
           }
         },
         "summary": "Get Timeline",
-        "tags": [
-          "patients"
-        ]
-      }
-    },
-    "/api/patients/{patient_id}/today": {
-      "get": {
-        "operationId": "getToday",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "patient_id",
-            "required": true,
-            "schema": {
-              "title": "Patient Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TodayOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Today",
         "tags": [
           "patients"
         ]

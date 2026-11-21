@@ -1,12 +1,12 @@
-"""Demo controls: reset the database and simulate the next N days."""
-from fastapi import APIRouter, HTTPException
+"""Meta and demo controls."""
+from fastapi import APIRouter
 from sqlmodel import select
 
 from app import seed
-from app.seed import simulate
 from app.deps import Db
 from app.models import Clinician
-from app.models.schemas import ClinicianOut, MetaOut, ResetOut, SimulateIn, SimulateOut
+from app.models.schemas import ClinicianOut, MetaOut, ResetOut
+from app.seed.pathways import DEFAULT_PATIENT_ID
 from app.services import clock, scoring
 from app.services.alerts import OUTCOME_LABELS
 
@@ -17,17 +17,10 @@ router = APIRouter(prefix="/api", tags=["admin"])
 def get_meta(db: Db):
     return MetaOut(today=clock.today(),
                    clinicians=[ClinicianOut.model_validate(c) for c in db.exec(select(Clinician)).all()],
-                   outcomes=OUTCOME_LABELS, model_version=scoring.current_model_version())
+                   outcomes=OUTCOME_LABELS, model_version=scoring.current_model_version(),
+                   default_patient_id=DEFAULT_PATIENT_ID)
 
 
 @router.post("/admin/reset", response_model=ResetOut, operation_id="resetDemo")
 def reset_demo():
     return ResetOut(ok=True, patients=seed.reset_database())
-
-
-@router.post("/admin/simulate", response_model=SimulateOut, operation_id="simulateDays")
-def simulate_days(data: SimulateIn, db: Db):
-    try:
-        return simulate.simulate(db, data.patient_id, data.days)
-    except KeyError:
-        raise HTTPException(404, "Pacient ne obstaja")

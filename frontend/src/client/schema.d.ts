@@ -21,23 +21,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/simulate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Simulate Days */
-        post: operations["simulateDays"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/alerts": {
         parameters: {
             query?: never;
@@ -83,23 +66,6 @@ export interface paths {
         put?: never;
         /** Create Checkin */
         post: operations["createCheckin"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Message */
-        post: operations["createMessage"];
         delete?: never;
         options?: never;
         head?: never;
@@ -174,6 +140,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/patients/{patient_id}/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Home
+         * @description Patient landing page: name and today's self-check steps.
+         */
+        get: operations["getPatientHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/patients/{patient_id}/progress": {
         parameters: {
             query?: never;
@@ -181,8 +167,31 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Progress */
+        /**
+         * Get Progress
+         * @description "Moj napredek": a very simple dashboard.
+         */
         get: operations["getProgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/patients/{patient_id}/selfcheck/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Selfcheck Summary
+         * @description How today's self-check went compared with previous days (shown at the end).
+         */
+        get: operations["getSelfcheckSummary"];
         put?: never;
         post?: never;
         delete?: never;
@@ -200,23 +209,6 @@ export interface paths {
         };
         /** Get Timeline */
         get: operations["getTimeline"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/patients/{patient_id}/today": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Today */
-        get: operations["getToday"];
         put?: never;
         post?: never;
         delete?: never;
@@ -332,55 +324,24 @@ export interface components {
             /** Updatedat */
             updatedAt: string;
         };
-        /** CheckinIn */
+        /**
+         * CheckinIn
+         * @description The two ratings at the start of a self-check.
+         */
         CheckinIn: {
-            /**
-             * Answeredby
-             * @default self
-             * @enum {string}
-             */
-            answeredBy: "self" | "assisted" | "relative";
-            /**
-             * Answers
-             * @default {}
-             */
-            answers: {
-                [key: string]: number;
-            };
-            /**
-             * Concern
-             * @default none
-             * @enum {string}
-             */
-            concern: "none" | "little" | "call";
-            /** Concerntext */
-            concernText?: string | null;
+            /** Pain */
+            pain: number;
             /** Patientid */
             patientId: string;
-            /**
-             * Warningsigns
-             * @default []
-             */
-            warningSigns: string[];
+            /** Wellbeing */
+            wellbeing: number;
         };
         /** CheckinOut */
         CheckinOut: {
-            /**
-             * Answeredby
-             * @enum {string}
-             */
-            answeredBy: "self" | "assisted" | "relative";
             /** Answers */
             answers: {
                 [key: string]: number;
             };
-            /**
-             * Concern
-             * @enum {string}
-             */
-            concern: "none" | "little" | "call";
-            /** Concerntext */
-            concernText: string | null;
             /** Createdat */
             createdAt: string;
             /**
@@ -392,22 +353,11 @@ export interface components {
             id: number;
             /** Patientid */
             patientId: string;
-            /** Warningsigns */
-            warningSigns: string[];
         };
         /** CheckinResult */
         CheckinResult: {
             /** Checkinid */
             checkinId: number;
-            /**
-             * Messagelevel
-             * @enum {string}
-             */
-            messageLevel: "thanks" | "neutral" | "call_clinic" | "call_112";
-            /** Messagetext */
-            messageText: string;
-            /** Messagetitle */
-            messageTitle: string;
         };
         /** ClientMeta */
         ClientMeta: {
@@ -445,37 +395,12 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** MessageIn */
-        MessageIn: {
-            /** Clinicianid */
-            clinicianId: string;
-            /** Patientid */
-            patientId: string;
-            /** Text */
-            text: string;
-        };
-        /** MessageOut */
-        MessageOut: {
-            /** Author */
-            author?: string | null;
-            /** Createdat */
-            createdAt: string;
-            /**
-             * Direction
-             * @enum {string}
-             */
-            direction: "to_patient" | "system";
-            /** Id */
-            id: number;
-            /** Patientid */
-            patientId: string;
-            /** Text */
-            text: string;
-        };
         /** MetaOut */
         MetaOut: {
             /** Clinicians */
             clinicians: components["schemas"]["ClinicianOut"][];
+            /** Defaultpatientid */
+            defaultPatientId: string;
             /** Modelversion */
             modelVersion: string;
             /** Outcomes */
@@ -517,10 +442,6 @@ export interface components {
             name: string;
             /** Questions */
             questions: components["schemas"]["Question"][];
-            /** Warningsigns */
-            warningSigns: components["schemas"]["WarningSign"][];
-            /** Warningsignsprompt */
-            warningSignsPrompt: string;
         };
         /** PatientDetail */
         PatientDetail: {
@@ -561,16 +482,43 @@ export interface components {
             status: "red" | "yellow" | "no_data" | "stable" | "insufficient_data";
             summary: components["schemas"]["PatientSummary"];
         };
+        /** PatientHomeOut */
+        PatientHomeOut: {
+            /**
+             * Hand
+             * @enum {string}
+             */
+            hand: "left" | "right";
+            /** Lastselfcheckday */
+            lastSelfcheckDay: string | null;
+            /** Name */
+            name: string;
+            /** Pathwaycode */
+            pathwayCode: string;
+            /** Pathwayname */
+            pathwayName: string;
+            /** Patientid */
+            patientId: string;
+            /** Selfcheckdonetoday */
+            selfcheckDoneToday: boolean;
+            /** Steps */
+            steps: components["schemas"]["SelfcheckStep"][];
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+        };
         /** PatientListItem */
         PatientListItem: {
-            /** Checkins7D */
-            checkins7d: number;
             /** Dayssincedischarge */
             daysSinceDischarge: number;
             /** Daystonextvisit */
             daysToNextVisit: number | null;
             /** Diverging */
             diverging: boolean;
+            /** Gamesparkline */
+            gameSparkline: components["schemas"]["SparkPoint"][];
             /** Id */
             id: string;
             /** Isdemo */
@@ -590,13 +538,13 @@ export interface components {
              * @enum {string}
              */
             side: "left" | "right";
-            /** Sparkline */
-            sparkline: components["schemas"]["SparkPoint"][];
             /**
              * Status
              * @enum {string}
              */
             status: "red" | "yellow" | "no_data" | "stable" | "insufficient_data";
+            /** Wellbeingsparkline */
+            wellbeingSparkline: components["schemas"]["SparkPoint"][];
         };
         /** PatientListOut */
         PatientListOut: {
@@ -627,7 +575,10 @@ export interface components {
             /** Nsessions */
             nSessions: number;
         };
-        /** ProgressOut */
+        /**
+         * ProgressOut
+         * @description "Moj napredek": a very simple dashboard.
+         */
         ProgressOut: {
             /** Clinicianreviewedat */
             clinicianReviewedAt: string | null;
@@ -637,6 +588,22 @@ export interface components {
             personalBestDay: string | null;
             /** Points */
             points: components["schemas"]["ProgressPoint"][];
+            /** Ratings */
+            ratings: components["schemas"]["RatingPoint"][];
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "first" | "better" | "similar" | "lower";
+            /**
+             * Trend
+             * @enum {string}
+             */
+            trend: "improving" | "stable" | "declining" | "unknown";
             /** Weekdone */
             weekDone: number;
             /** Weekgoal */
@@ -657,7 +624,10 @@ export interface components {
             /** Value */
             value: number;
         };
-        /** Question */
+        /**
+         * Question
+         * @description A daily rating. v8: every pathway has `wellbeing` and `pain`, both 1-10.
+         */
         Question: {
             /**
              * Higherisworse
@@ -668,25 +638,40 @@ export interface components {
             id: string;
             /**
              * Kind
-             * @enum {string}
+             * @default scale
+             * @constant
              */
-            kind: "faces5" | "scale" | "yes_no" | "count";
+            kind: "scale";
             /**
              * Max
-             * @default 1
+             * @default 10
              */
             max: number;
             /** Maxlabel */
             maxLabel?: string | null;
             /**
              * Min
-             * @default 0
+             * @default 1
              */
             min: number;
             /** Minlabel */
             minLabel?: string | null;
+            /** Shortlabel */
+            shortLabel: string;
             /** Text */
             text: string;
+        };
+        /** RatingPoint */
+        RatingPoint: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Pain */
+            pain: number | null;
+            /** Wellbeing */
+            wellbeing: number | null;
         };
         /** ResetOut */
         ResetOut: {
@@ -694,6 +679,57 @@ export interface components {
             ok: boolean;
             /** Patients */
             patients: number;
+        };
+        /** SelfcheckStep */
+        SelfcheckStep: {
+            /** Done */
+            done: boolean;
+            /** Gametype */
+            gameType?: ("trace" | "camera_tapping" | "camera_reach" | "motion") | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "ratings" | "game";
+            /** Level */
+            level?: number | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * SelfcheckSummary
+         * @description Shown once at the end of the self-check: how it went compared with previous days.
+         */
+        SelfcheckSummary: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Levelsdone */
+            levelsDone: number;
+            /** Levelstotal */
+            levelsTotal: number;
+            /** Patientid */
+            patientId: string;
+            /** Points */
+            points: components["schemas"]["ProgressPoint"][];
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "first" | "better" | "similar" | "lower";
+            /**
+             * Trend
+             * @enum {string}
+             */
+            trend: "improving" | "stable" | "declining" | "unknown";
         };
         /**
          * SessionIn
@@ -762,24 +798,8 @@ export interface components {
         };
         /** SessionResult */
         SessionResult: {
-            /**
-             * Comparedtousual
-             * @enum {string}
-             */
-            comparedToUsual: "first" | "better" | "similar" | "lower" | "not_scored";
-            /**
-             * Messagelevel
-             * @enum {string}
-             */
-            messageLevel: "thanks" | "neutral" | "call_clinic" | "call_112";
-            /** Messagetext */
-            messageText: string;
-            /** Messagetitle */
-            messageTitle: string;
-            /** Offerretry */
-            offerRetry: boolean;
-            /** Personalbest */
-            personalBest: boolean;
+            /** Scored */
+            scored: boolean;
             /** Sessionid */
             sessionId: number;
         };
@@ -833,32 +853,6 @@ export interface components {
             /** Startedat */
             startedAt: string;
         };
-        /** SimulateIn */
-        SimulateIn: {
-            /**
-             * Days
-             * @default 7
-             */
-            days: number;
-            /** Patientid */
-            patientId: string;
-        };
-        /** SimulateOut */
-        SimulateOut: {
-            /** Checkinsadded */
-            checkinsAdded: number;
-            /** Daysadded */
-            daysAdded: number;
-            /** Patientid */
-            patientId: string;
-            /** Sessionsadded */
-            sessionsAdded: number;
-            /**
-             * Today
-             * Format: date
-             */
-            today: string;
-        };
         /** SparkPoint */
         SparkPoint: {
             /**
@@ -880,8 +874,6 @@ export interface components {
              * Format: date
              */
             dischargeDate: string;
-            /** Messages */
-            messages: components["schemas"]["MessageOut"][];
             /** Nextvisitdate */
             nextVisitDate: string | null;
             /** Patientid */
@@ -895,54 +887,6 @@ export interface components {
             today: string;
             /** Trends */
             trends: components["schemas"]["TrendPoint"][];
-        };
-        /** TodayOut */
-        TodayOut: {
-            /** Clinicianreviewedat */
-            clinicianReviewedAt: string | null;
-            /**
-             * Hand
-             * @enum {string}
-             */
-            hand: "left" | "right";
-            lastMessage: components["schemas"]["MessageOut"] | null;
-            /** Name */
-            name: string;
-            /** Pathwaycode */
-            pathwayCode: string;
-            /** Patientid */
-            patientId: string;
-            /** Reminder */
-            reminder: string | null;
-            /** Streakdays */
-            streakDays: number;
-            /** Tasks */
-            tasks: components["schemas"]["TodayTask"][];
-            /**
-             * Today
-             * Format: date
-             */
-            today: string;
-            /** Weekdone */
-            weekDone: number;
-        };
-        /** TodayTask */
-        TodayTask: {
-            /** Done */
-            done: boolean;
-            /** Gametype */
-            gameType?: ("trace" | "camera_tapping" | "camera_reach" | "motion") | null;
-            /** Id */
-            id: string;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "checkin" | "game";
-            /** Level */
-            level?: number | null;
-            /** Title */
-            title: string;
         };
         /** TrendPoint */
         TrendPoint: {
@@ -993,18 +937,6 @@ export interface components {
             /** Error Type */
             type: string;
         };
-        /** WarningSign */
-        WarningSign: {
-            /**
-             * Action
-             * @enum {string}
-             */
-            action: "call_112" | "call_clinic";
-            /** Id */
-            id: string;
-            /** Text */
-            text: string;
-        };
     };
     responses: never;
     parameters: never;
@@ -1030,39 +962,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResetOut"];
-                };
-            };
-        };
-    };
-    simulateDays: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SimulateIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SimulateOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1153,39 +1052,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CheckinResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    createMessage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MessageIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -1290,6 +1156,37 @@ export interface operations {
             };
         };
     };
+    getPatientHome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                patient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientHomeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     getProgress: {
         parameters: {
             query?: never;
@@ -1321,6 +1218,37 @@ export interface operations {
             };
         };
     };
+    getSelfcheckSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                patient_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfcheckSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     getTimeline: {
         parameters: {
             query?: never;
@@ -1339,37 +1267,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    getToday: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                patient_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TodayOut"];
                 };
             };
             /** @description Validation Error */

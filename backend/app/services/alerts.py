@@ -28,7 +28,7 @@ from typing import Any, Optional
 
 from sqlmodel import Session, select
 
-from app.models import Alert, Checkin, Clinician, GameSession, Message, Pathway, Patient, TrendSnapshot
+from app.models import Alert, Checkin, Clinician, GameSession, Pathway, Patient, TrendSnapshot
 from app.services import clock, divergence
 
 YELLOW_DROP_POINTS = 10.0  # combined trend at least this far below baseline ...

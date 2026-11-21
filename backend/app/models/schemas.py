@@ -1,8 +1,11 @@
-"""Public request / response models (IMPLEMENTATION_PLAN.md section 7).
+"""Public request / response models (IMPLEMENTATION_PLAN.md section 7, v8).
 
 This file IS the API contract: contracts/openapi.json and the TypeScript types are
 generated from it. Shared hot file: only the orchestrator / Matevž edits it.
 JSON is camelCase (matches GameResult in plan section 5).
+
+v8: the patient only does a self-check (two ratings + games) and never gets a call
+prompt. Alerts are the clinician's business only.
 """
 from datetime import date, datetime, timezone
 from typing import Annotated, Any, Literal, Optional
@@ -34,10 +37,6 @@ AlertStatus = Literal["new", "acknowledged", "closed"]
 AlertSource = Literal["game", "checkin", "missing"]
 # status shown in the triage list; "stable" patients are grey-neutral in the UI, not green
 PatientStatus = Literal["red", "yellow", "no_data", "stable", "insufficient_data"]
-Concern = Literal["none", "little", "call"]
-AnsweredBy = Literal["self", "assisted", "relative"]
-# four patient-facing message levels (plan section 9, Pacient, item 5)
-MessageLevel = Literal["thanks", "neutral", "call_clinic", "call_112"]
 Outcome = Literal[
     "called_reassured",  # poklical, pomiril
     "adjusted_exercises",  # prilagodil vaje
@@ -46,7 +45,10 @@ Outcome = Literal[
     "unreachable",  # nedosegljiv
     "false_alarm",  # lažni alarm ali težava s podatki
 ]
-QuestionKind = Literal["faces5", "scale", "yes_no", "count"]
+# how today went compared with the patient's own recent days (never a number)
+Tone = Literal["first", "better", "similar", "lower"]
+# direction of the last days, in patient-facing terms; "unknown" until there is a baseline
+PatientTrend = Literal["improving", "stable", "declining", "unknown"]
 
 
 # ---------------------------------------------------------------- pathways
@@ -54,24 +56,21 @@ QuestionKind = Literal["faces5", "scale", "yes_no", "count"]
 class PathwayGame(ApiModel):
     game_type: GameType
     title: str  # e.g. "Sledi poti"
-    levels: list[int]  # one session per level in a measurement round
+    levels: list[int]  # one session per level in a self-check
 
 
 class Question(ApiModel):
+    """A daily rating. v8: every pathway has `wellbeing` and `pain`, both 1-10."""
+
     id: str
-    kind: QuestionKind
+    kind: Literal["scale"] = "scale"
     text: str
-    min: int = 0
-    max: int = 1
+    short_label: str  # e.g. "Počutje"
+    min: int = 1
+    max: int = 10
     min_label: Optional[str] = None
     max_label: Optional[str] = None
     higher_is_worse: bool = True
-
-
-class WarningSign(ApiModel):
-    id: str
-    text: str
-    action: Literal["call_112", "call_clinic"]
 
 
 class PathwayOut(ApiModel):
@@ -80,8 +79,6 @@ class PathwayOut(ApiModel):
     frequency: str
     games: list[PathwayGame]
     questions: list[Question]
-    warning_signs: list[WarningSign]
-    warning_signs_prompt: str  # the first check-in question
 
 
 # ---------------------------------------------------------------- alerts
@@ -91,10 +88,12 @@ class AlertOut(ApiModel):
     patient_id: str
     patient_name: str
     source: AlertSource
-    rule: str
+    rule: str  # "trend_drop" | "subjective_drop" | "both" | "big_drop" | "no_data"
     severity: Severity
     status: AlertStatus
-    reason: str
+    reason: str  # one sentence
+    # {"triggers": [{rule, severity, day, reason}], "delta": float|None, "sessionIds": [...],
+    #  "checkinIds": [...], "divergence": str|None}
     evidence: dict[str, Any]
     diverging: bool
     opened_day: date
@@ -116,28 +115,11 @@ class AlertAckIn(ApiModel):
     note: Optional[str] = None
 
 
-# ---------------------------------------------------------------- messages
-
-class MessageOut(ApiModel):
-    id: int
-    patient_id: str
-    direction: Literal["to_patient", "system"]
-    author: Optional[str] = None
-    text: str
-    created_at: UtcDatetime
-
-
-class MessageIn(ApiModel):
-    patient_id: str
-    clinician_id: str
-    text: str = Field(min_length=1, max_length=1000)
-
-
 # ---------------------------------------------------------------- patients (triage list)
 
 class SparkPoint(ApiModel):
     day: date
-    value: Optional[float]  # combined trend: points vs own baseline
+    value: Optional[float]
 
 
 class PatientListItem(ApiModel):
@@ -148,10 +130,11 @@ class PatientListItem(ApiModel):
     side: Hand
     days_since_discharge: int
     status: PatientStatus
-    reason: str  # one sentence, in words
+    reason: str  # one short sentence, in words
     diverging: bool
-    sparkline: list[SparkPoint]
-    checkins_7d: int = Field(alias="checkins7d")
+    # last 21 days. game: combined trend, points vs own baseline. wellbeing: the 1-10 rating.
+    game_sparkline: list[SparkPoint]
+    wellbeing_sparkline: list[SparkPoint]
     days_to_next_visit: Optional[int]
     open_alert_id: Optional[int]
     is_demo: bool
@@ -224,11 +207,7 @@ class CheckinOut(ApiModel):
     patient_id: str
     day: date
     created_at: UtcDatetime
-    warning_signs: list[str]
-    answers: dict[str, float]
-    concern: Concern
-    concern_text: Optional[str]
-    answered_by: AnsweredBy
+    answers: dict[str, float]  # {"wellbeing": 1-10, "pain": 1-10}
 
 
 class TrendPoint(ApiModel):
@@ -251,32 +230,29 @@ class TimelineOut(ApiModel):
     checkins: list[CheckinOut]
     trends: list[TrendPoint]
     alerts: list[AlertOut]  # all alerts incl. closed (chart markers + action log)
-    messages: list[MessageOut]
 
 
-# ---------------------------------------------------------------- patient "Danes" + progress
+# ---------------------------------------------------------------- patient home, self-check, progress
 
-class TodayTask(ApiModel):
-    id: str  # "checkin" | "trace:1" ...
-    kind: Literal["checkin", "game"]
-    title: str
+class SelfcheckStep(ApiModel):
+    id: str  # "ratings" | "trace:1" | "trace:2" | "trace:3" | later "camera_tapping:1" ...
+    kind: Literal["ratings", "game"]
+    title: str  # e.g. "Počutje in bolečina", "Ravna črta"
     game_type: Optional[GameType] = None
     level: Optional[int] = None
-    done: bool
+    done: bool  # already done today
 
 
-class TodayOut(ApiModel):
+class PatientHomeOut(ApiModel):
     patient_id: str
     name: str
     pathway_code: str
+    pathway_name: str
     hand: Hand
     today: date
-    tasks: list[TodayTask]
-    streak_days: int
-    week_done: int  # days with any entry in the last 7
-    last_message: Optional[MessageOut]
-    reminder: Optional[str]  # automatic reminder after 2 missed days
-    clinician_reviewed_at: Optional[UtcDatetime]
+    steps: list[SelfcheckStep]  # in order; the self-check wizard walks through them
+    selfcheck_done_today: bool  # every step done
+    last_selfcheck_day: Optional[date]
 
 
 class ProgressPoint(ApiModel):
@@ -285,39 +261,57 @@ class ProgressPoint(ApiModel):
     label: Literal["lower", "usual", "better"]
 
 
-class ProgressOut(ApiModel):
+class RatingPoint(ApiModel):
+    day: date
+    wellbeing: Optional[float]
+    pain: Optional[float]
+
+
+class PatientFeedback(ApiModel):
+    """What the patient sees. Calm and honest: never a number, an impairment class or a
+    prompt to call anyone."""
+
+    tone: Tone
+    trend: PatientTrend
+    title: str
+    text: str
+
+
+class SelfcheckSummary(PatientFeedback):
+    """Shown once at the end of the self-check: how it went compared with previous days."""
+
     patient_id: str
-    points: list[ProgressPoint]
+    day: date
+    levels_done: int
+    levels_total: int
+    points: list[ProgressPoint]  # last 14 days, for a small chart
+
+
+class ProgressOut(PatientFeedback):
+    """"Moj napredek": a very simple dashboard."""
+
+    patient_id: str
+    points: list[ProgressPoint]  # whole history
+    ratings: list[RatingPoint]  # whole history
     personal_best_day: Optional[date]
-    week_done: int
+    week_done: int  # days with a self-check in the last 7
     week_goal: int  # 5 of 7
     clinician_reviewed_at: Optional[UtcDatetime]
 
 
-# ---------------------------------------------------------------- check-ins
+# ---------------------------------------------------------------- submissions
 
 class CheckinIn(ApiModel):
+    """The two ratings at the start of a self-check."""
+
     patient_id: str
-    warning_signs: list[str] = []
-    answers: dict[str, float] = {}
-    concern: Concern = "none"
-    concern_text: Optional[str] = None
-    answered_by: AnsweredBy = "self"
+    wellbeing: int = Field(ge=1, le=10)  # higher = better
+    pain: int = Field(ge=1, le=10)  # higher = worse
 
 
-class PatientFeedback(ApiModel):
-    """What the patient sees after submitting. Never a bare number or impairment class."""
-
-    message_level: MessageLevel
-    message_title: str
-    message_text: str
-
-
-class CheckinResult(PatientFeedback):
+class CheckinResult(ApiModel):
     checkin_id: int
 
-
-# ---------------------------------------------------------------- game sessions
 
 class ClientMeta(ApiModel):
     input_device: InputDevice
@@ -334,7 +328,7 @@ class SessionIn(ApiModel):
     game_type: GameType
     level: int
     hand: Hand
-    started_at: UtcDatetime
+    started_at: datetime
     duration_ms: int = Field(ge=0)
     completed: bool
     abort_reason: Optional[str] = None
@@ -342,11 +336,9 @@ class SessionIn(ApiModel):
     client_meta: ClientMeta
 
 
-class SessionResult(PatientFeedback):
+class SessionResult(ApiModel):
     session_id: int
-    compared_to_usual: Literal["first", "better", "similar", "lower", "not_scored"]
-    offer_retry: bool  # a single poor result offers a repeat; the clinician gets nothing
-    personal_best: bool
+    scored: bool  # False for aborted attempts
 
 
 class SessionRawOut(ApiModel):
@@ -374,21 +366,9 @@ class MetaOut(ApiModel):
     clinicians: list[ClinicianOut]
     outcomes: dict[str, str]  # outcome id -> Slovenian label
     model_version: str
+    default_patient_id: str  # the patient selected when the app opens
 
 
 class ResetOut(ApiModel):
     ok: bool
     patients: int
-
-
-class SimulateIn(ApiModel):
-    patient_id: str
-    days: int = Field(default=7, ge=1, le=30)
-
-
-class SimulateOut(ApiModel):
-    patient_id: str
-    days_added: int
-    sessions_added: int
-    checkins_added: int
-    today: date  # the (shifted) "today" after simulation

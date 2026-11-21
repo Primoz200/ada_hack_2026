@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import seed
-from app.routers import admin, alerts, checkins, messages, pathways, patients, sessions
+from app.routers import admin, alerts, checkins, pathways, patients, sessions
 
 FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -30,7 +30,7 @@ app = FastAPI(title="Platforma za spremljanje pacientov po odpustu",
               description="Raziskovalni prototip na sintetičnih podatkih.", version="0.1.0",
               lifespan=lifespan)
 
-for r in (pathways, patients, checkins, sessions, alerts, messages, admin):
+for r in (pathways, patients, checkins, sessions, alerts, admin):
     app.include_router(r.router)
 
 if FRONTEND_DIST.exists():
