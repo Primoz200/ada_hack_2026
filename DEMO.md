@@ -25,23 +25,21 @@ cd ../frontend && npm ci
 
 Baza je potrošna: ob vsakem zagonu backenda se ustvari na novo in deterministično napolni. Z `APP_KEEP_DB=1` se obstoječa baza ohrani.
 
+## Glavni potek dema (snemanje na namizju)
+
+1. Odpri `http://localhost:5173` (ali `https://`, če teče z HTTPS). Odpre se pacientov pogled; levo zgoraj je izbran **Ivan Zupan**.
+2. Po želji najprej pokaži zdravnikov pogled (desno zgoraj »Pogled zdravnika«): Ivan je med stabilnimi, opozorila nima, naslednji pregled je čez 30 dni.
+3. Nazaj v pogled pacienta → **Začni samopregled**: izberi počutje in bolečino, nato sledi trem potem **namerno površno** (vijugaj čez rob kanala, a ostani blizu poti, sicer se naloga konča šele ob izteku časa).
+4. Na koncu pacient prebere miren stavek, da gre zadnje dni nekoliko slabše. Nobenega poziva h klicu.
+5. »Pogled zdravnika«: Ivan je zdaj **Za pregled**. Na njegovi strani so padec na grafu, »14 točk pod izhodiščem«, naslednji pregled čez 30 dni in predvajanje pravkar posnete seje ob seji iz izhodišča.
+
+Koliko površno? Opozorilo se sproži, če je povprečna ocena treh stopenj pod približno 67 (skrbno sledenje z miško dobi okoli 92, vidno površno okoli 50). Skrben samopregled opozorila ne sproži in pacientu pove, da je šlo bolje.
+
+Pred vsakim snemanjem: zdravnikov pogled → **Ponastavi demo podatke** (`POST /api/admin/reset`). Ponastavi se tudi ob vsakem zagonu backenda.
+
 ## Telefon
 
-1. Telefon in prenosnik v istem omrežju (če omrežje blokira povezave med napravami, prenosnik poveži na dostopno točko telefona).
-2. Poišči IP prenosnika: `ipconfig getifaddr en0`.
-3. Na telefonu odpri `https://<IP>:5173` in potrdi opozorilo o potrdilu.
-4. Izberi pacienta »Demo« in opravi dnevni vnos ter igro sledenja s prstom.
-
-Alternativa za Android prek USB: `adb reverse tcp:5173 tcp:5173`, nato `https://localhost:5173`.
-
-## Kontrole za demo (zdravnikov pregled, razdelek »Demo«)
-
-- **Ponastavi demo podatke**: vrne začetno stanje (`POST /api/admin/reset`).
-- **Simuliraj naslednjih 7 dni**: izbranemu pacientu doda 7 dni s počasnim padcem rezultatov igre, da se sproži rumeno opozorilo; ostali pacienti nadaljujejo svoje zgodbe (`POST /api/admin/simulate`).
-
-## Seznam posnetkov
-
-Po ponastavitvi demo podatkov, po seznamu v `IMPLEMENTATION_PLAN.md`, poglavje 13.
+Aplikacija je po novem najprej za namizje, na telefonu pa ostane uporabna. Za telefon v istem omrežju: `ipconfig getifaddr en0`, nato `https://<IP>:5173` (potrdi opozorilo o potrdilu).
 
 ## Testi
 

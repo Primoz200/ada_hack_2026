@@ -98,3 +98,24 @@
 - V brskalniku (headless Chrome, simulirani dogodki) preverjeno: vse tri stopnje igre (dotik in miška), dnevni vnos do »Poslano vašemu zdravniku«, celozaslonski »Takoj pokličite 112«, zaprtje opozorila z izidom, simulacija 7 dni po seji v živo še vedno sproži rumeno opozorilo.
 - Popravki: prazno platno igre v razvojnem načinu, podvojen naslov na zaslonu 112, razlog v seznamu po zaprtju opozorila, bolj gladke sintetične sledi, imena značilk usklajena s Primoževim modelom.
 - `vite.config.ts`: cilj proxyja se nastavi z `API_URL` (privzeto `http://localhost:8000`).
+
+## 2026-11-21 (22.15) — Redesign v8: samopregled, opozorila samo pri zdravniku, videz po zVEM
+
+**Odločitve (Matevž):** pacient nikoli ne dobi poziva h klicu in ne vidi alarmov; desktop first; pristajalna stran je pacientov pogled z izbirnikom pacienta levo zgoraj in preklopom na zdravnika desno zgoraj; pacient ima samo »Samopregled« (počutje + bolečina 1–10, nato tri igre sledenja; računalniški vid, ko ga Primož konča) in »Moj napredek«; »Simuliraj 7 dni« odstranjen; slab test v živo sproži opozorilo; »Nujno« = igra in počutje padata hkrati.
+**Način dela:** Fable orkestrira, trije agenti Opus (high) v worktreejih: backend, pacient, zdravnik. Oblikovanje s skillom impeccable; `PRODUCT.md` in `DESIGN.md` sta skupni oblikovni dogovor (po posnetkih zVEM: bela glava, modro-siva podlaga, veliki beli paneli, skrilasto modra, zelen poudarek, rdeč glavni gumb, Hanken Grotesk).
+
+**Narejeno:**
+- Pogodba v8 (`schemas.py`): `CheckinIn {wellbeing, pain}`, `/patients/{id}/home`, `/selfcheck/summary`, preprostejši `/progress`; brez opozorilnih znakov, skrbi, sporočil in simulacije.
+- Pravila opozoril: `trend_drop` (danes ≤ −10 in 2 od prejšnjih 3 dni ≤ −5), `subjective_drop`, rdeča `both` / `big_drop`, siva `no_data`. Skupni trend upošteva tudi stopnje, ki danes še niso odigrane (z zadnjo vrednostjo).
+- Mirna pacientova sporočila (`services/feedback.py`), brez številk; test preveri prepovedane besede.
+- Novi sintetični pacienti: Ivan Zupan (p3) tri tedne okreva, nato pada 0,85 točke na dan, ob ponastavitvi −8,6 brez opozorila, pregled čez 30 dni.
+- Pacient: Domov, čarovnik Samopregled, rezultat z mini grafom, Moj napredek. Zdravnik: vrstica = oznaka + ime + krivulji, poenostavljen okvir opozorila, poudarjen naslednji pregled, predvajanje sej ostane.
+
+**Preverjeno v brskalniku s pravim backendom (headless Chrome, simulirana miška):** površen samopregled pri Ivanu (ocene 53 / 51 / 52) → sporočilo »Zadnje dni gre nekoliko slabše« → pri zdravniku »Za pregled«, 14,6 točke pod izhodiščem; skrben samopregled (92 / 91 / 93) → brez opozorila, »Danes je šlo bolje«. Testi: 97 backend, 43 frontend.
+
+**Ključno naučeno:**
+- Javne strani zVEM se ne da prebrati s preprostim fetchom (JavaScript); posnetki zaslona od Matevža so bili odločilni.
+- Agenti za vmesnik so brez backenda delali z lastnim mock strežnikom in posnetki zaslona; prave podatke je treba preveriti ob integraciji (pri meni: odrezana oznaka na grafu, premajhne krivulje).
+- Prag za demo: opozorilo se sproži pri povprečni oceni pod približno 67; zato je bila Ivanova raven dvignjena.
+
+**Odprto:** igra z računalniškim vidom (mesto v čarovniku in pri zdravniku je pripravljeno); pravi telefon ni preverjen; `IMPLEMENTATION_PLAN.md` ima poglavje v8 na vrhu, starejša poglavja niso prepisana.

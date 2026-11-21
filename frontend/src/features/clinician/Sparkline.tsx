@@ -18,7 +18,7 @@ interface Props {
   height?: number
 }
 
-export function Sparkline({ caption, description, points, today, domain, reference, emptyText = 'ni podatkov', width = 168, height = 46 }: Props) {
+export function Sparkline({ caption, description, points, today, domain, reference, emptyText = 'ni podatkov', width = 220, height = 50 }: Props) {
   const rows: SparkRow[] = sparkRows(points, today, domain)
   const n = sparkValueCount(rows)
   const lastIdx = rows.findLastIndex((r) => r.v != null)

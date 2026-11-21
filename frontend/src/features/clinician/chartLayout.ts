@@ -2,7 +2,7 @@
 import { formatDay, type Marker } from './model'
 
 export const Y_AXIS_WIDTH = 64
-export const CHART_MARGIN = { top: 8, right: 24, bottom: 2, left: 0 }
+export const CHART_MARGIN = { top: 8, right: 40, bottom: 2, left: 0 } // right: room for a marker label on the last day
 export const AXIS_TICK = { fontSize: 13, fill: 'var(--muted-foreground)' }
 export const AXIS_LABEL_STYLE = { fontSize: 13, textAnchor: 'middle' as const, fill: 'var(--muted-foreground)' }
 
