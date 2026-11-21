@@ -1,6 +1,6 @@
 # Implementacijski načrt platforme (v6)
 
-Stanje: v6, 21. 11. 2026 ob 17.35 (odločitve po pregledu načrta: skupni trend, prst in miška enakovredna, model točkuje le sejo, Primoževa koda v `backend/models/`). Usklajen z raziskovalnim poročilom in z Matevževimi odločitvami (telefon, prst ali miška, delitev dela, lokalni razvoj, Azure, predstavitev brez dema v živo). Avtor: Matevž + Claude. Odprte točke so zbrane v poglavju 12.
+Stanje: v7, 21. 11. 2026 ob 18.30 (delitev dela: vso kodo platforme in ves frontend, vključno z igrami, implementira Matevž; Primož prispeva raziskavo, kontekst in modele strojnega učenja v backendu. Prej v6: odločitve po pregledu načrta: skupni trend, prst in miška enakovredna, model točkuje le sejo, Primoževa koda v `backend/models/`). Usklajen z raziskovalnim poročilom in z Matevževimi odločitvami (telefon, prst ali miška, delitev dela, lokalni razvoj, Azure, predstavitev brez dema v živo). Avtor: Matevž + Claude. Odprte točke so zbrane v poglavju 12.
 Ozadje in viri: `reports/Platforma za spremljanje pacientov po odpustu.md` (platforma), `RESEARCH.md` (igre), `Daljša predstavitev - Ixtlan Team AdaHack 2026.pdf` (navodila naročnika).
 
 ## 1. Kaj gradiva in zakaj
@@ -85,14 +85,16 @@ Znane pasti:
   app/routers/           patients, checkins, sessions, alerts  (Matevž)
   app/services/alerts.py pravila opozoril                      (Matevž)
   app/services/trend.py  assess_trend, skupni trend (pravila, brez modela)  (Matevž)
-  models/                score_session, modeli, generator sintetike, stopnje (Primož; prej vrhnja mapa /models)
+  app/services/scoring.py  adapter: pokliče Primožev model, sicer nadomestni točkovalnik  (Matevž)
+  app/services/ingest.py   enotna pisalna pot (API, seed, simulacija)                    (Matevž)
+  models/                modeli strojnega učenja, generator sintetike (Primož; zdaj še vrhnja mapa /models)
   app/seed/              generator sintetičnih pacientov       (Matevž, značilke uskladi s Primožem)
 /frontend/src
   app/                   usmerjanje, postavitev, preklop vlog  (Matevž)
   features/patient/      pacientov del, najprej za telefon     (Matevž)
   features/clinician/    zdravnikov del                        (Matevž)
-  games/                 trace/, camera/, shared/              (Primož)
-  games/_stub/           nadomestna igra                       (Primož)
+  games/                 trace/, shared/, registry.ts          (Matevž)
+  games/_stub/           nadomestna igra                       (Matevž)
   client/                generirani tipi, ne urejaj ročno
 /shared/tracer_levels.json   oblike stopenj; bereta igra (frontend) in model (backend)  (Primož)
 /docs/tracer_data_spec.md    Primoževa specifikacija sledenja; ob neskladju velja poglavje 5
@@ -101,11 +103,11 @@ Znane pasti:
 IMPLEMENTATION_PLAN.md, AGENTS.md, DEMO.md
 ```
 
-Pravilo: nihče (ne človek ne agent) ne ureja map drugega. Skupne vroče datoteke (`app/models/`, registracija routerjev, `routes.tsx`) ureja Matevž. Pozor na imeni: `backend/app/models/` so tabele (Matevž), `backend/models/` je strojno učenje (Primož).
+Pravilo: nihče (ne človek ne agent) ne ureja map drugega. Primoževe so `backend/models/` (oziroma vrhnja `/models`), `shared/` in `docs/`; vse ostalo je Matevževo. Skupne vroče datoteke (`app/models/`, registracija routerjev, `routes.tsx`) ureja Matevž. Pozor na imeni: `backend/app/models/` so tabele (Matevž), `backend/models/` je strojno učenje (Primož).
 
-## 5. Vmesnik med igrami in platformo (dogovor s Primožem v prvi uri)
+## 5. Vmesnik med igrami in platformo
 
-Delitev (potrjeno): Primož dela igre, modele in točkovanje; Matevž dela platformo. Platforma surove podatke vsake seje shrani in jih modelu posreduje skupaj z vso zgodovino.
+Delitev (v7): Matevž implementira platformo in igre (ves frontend); Primož prispeva raziskavo, kontekst in modele strojnega učenja, ki jih platforma kliče prek adapterja `app/services/scoring.py`. Platforma surove podatke vsake seje shrani in jih modelu posreduje skupaj z vso zgodovino.
 
 Vsaka igra je React komponenta z enakim podpisom. Platforma poskrbi za navodila pred igro, pošiljanje na API in zaslon z rezultatom.
 
@@ -180,8 +182,8 @@ def assess_trend(history: list[ScoredSession]) -> TrendResult:
 Platforma ob vsaki novi seji pokliče `score_session`, shrani rezultat, nato za vsako stopnjo pokliče `assess_trend`, ločene trende združi v **skupni trend** (poglavje 8) in na njem uporabi pravila opozoril.
 
 Da nihče ne čaka:
-- Primož najprej odda **nadomestno igro**, ki po 3 sekundah vrne vnaprej pripravljen `GameResult`.
-- Matevž najprej odda **nadomestni točkovalnik** (povprečna razdalja sledi od želene črte + čas → 0–100) in **privzeti trend** (izhodišče + EWMA, poglavje 8) z istima podpisoma. Oba ostaneta kot varovalka, če se model na demo računalniku ne naloži.
+- **Nadomestna igra** (`games/_stub`) po 3 sekundah vrne vnaprej pripravljen `GameResult`; ostane kot varovalka za igre brez implementacije.
+- **Nadomestni točkovalnik** (povprečna razdalja sledi od želene črte + čas → 0–100) in **privzeti trend** (izhodišče + EWMA, poglavje 8) z istima podpisoma. Oba ostaneta kot varovalka, če se model na demo računalniku ne naloži.
 - Za kamero se na strežnik pošljejo samo točke telesa oziroma izpeljane vrste, nikoli video.
 
 **Testi s kamero: postavitev** (odločitev)
