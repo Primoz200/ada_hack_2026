@@ -1,7 +1,38 @@
 # Implementacijski načrt platforme (v6)
 
-Stanje: v7, 21. 11. 2026 ob 18.30 (delitev dela: vso kodo platforme in ves frontend, vključno z igrami, implementira Matevž; Primož prispeva raziskavo, kontekst in modele strojnega učenja v backendu. Prej v6: odločitve po pregledu načrta: skupni trend, prst in miška enakovredna, model točkuje le sejo, Primoževa koda v `backend/models/`). Usklajen z raziskovalnim poročilom in z Matevževimi odločitvami (telefon, prst ali miška, delitev dela, lokalni razvoj, Azure, predstavitev brez dema v živo). Avtor: Matevž + Claude. Odprte točke so zbrane v poglavju 12.
-Ozadje in viri: `reports/Platforma za spremljanje pacientov po odpustu.md` (platforma), `RESEARCH.md` (igre), `Daljša predstavitev - Ixtlan Team AdaHack 2026.pdf` (navodila naročnika).
+Stanje: **v8, 21. 11. 2026 ob 20.30.** Poglavje »v8« spodaj velja pred vsem ostalim; kjer se starejša poglavja z njim ne ujemajo (dnevni vnos z vprašalnikom, opozorilni znaki, pozivi h klicu, telefon kot prva naprava, »Simuliraj 7 dni«), velja v8. Avtor: Matevž + Claude.
+Ozadje in viri: `reports/Platforma za spremljanje pacientov po odpustu.md` (platforma), `RESEARCH.md` (igre), `Daljša predstavitev - Ixtlan Team AdaHack 2026.pdf` (navodila naročnika). Oblikovanje: `PRODUCT.md`, `DESIGN.md`.
+
+## v8: kaj se je spremenilo po prvem pregledu delujoče platforme
+
+**Odločitve (Matevž, 21. 11. zvečer)**
+- **Pacient nikoli ne dobi poziva h klicu** (ne 112, ne ambulanta) in ne vidi alarmov. Alarmna stanja so izključno zdravnikova stvar. Opozorilni znaki in vprašalnik so odstranjeni.
+- **Desktop first** (lepši posnetki); telefon ostane uporaben, ni pa več prva naprava.
+- **Pristajalna stran je pacientov pogled:** levo zgoraj izbirnik pacienta, desno zgoraj preklop na pogled zdravnika.
+- **Pacient ima dve možnosti:** »Samopregled« in »Moj napredek«.
+  - Samopregled: (1) počutje 1–10 in bolečina 1–10, (2) igre sledenja ena za drugo (črta, krog, labirint), (3) računalniški vid, ko ga Primož konča; na koncu en miren stavek, kako je šlo glede na pretekle dni, in gumb »Domov«. Brez statistike.
+  - Moj napredek: zelo preprosta nadzorna plošča.
+- **Zdravnik:** vrstica v seznamu je oznaka stanja + ime + krivulje (sledenje, počutje, kasneje računalniški vid); okvir opozorila je poenostavljen; predvajanje sej ostane; razdelka »Skrb pacienta« in »Odgovarjal« sta odstranjena.
+- **»Simuliraj 7 dni« je odstranjen.** »Ponastavi demo podatke« ostane.
+- **Videz po zgledu zVEM / zVEM+** (`DESIGN.md`).
+
+**Pravila opozoril (nadomeščajo tabelo v poglavju 8)**
+
+| Stopnja | Pravilo | Pomen |
+|---|---|---|
+| Za pregled (rumena) | `trend_drop` | skupni trend danes ≤ −10 in v vsaj 2 od prejšnjih 3 dni s sejo ≤ −5 |
+| Za pregled (rumena) | `subjective_drop` | 7-dnevno povprečje počutja vsaj 2 nižje ali bolečine vsaj 2 višje kot teden prej |
+| Nujno (rdeča) | `both`, `big_drop` | obe rumeni hkrati, ali skupni trend ≤ −20 |
+| Brez podatkov (siva) | `no_data` | 4 dni brez vnosa |
+
+En slab dan pri stabilnem pacientu ne sproži ničesar; pri pacientu, ki že nekaj dni drsi pod izhodišče, en slab samopregled prestopi prag.
+
+**Glavni potek dema**
+1. Ponastavitev. Glavni pacient (kap, privzeto izbran) je tri tedne lepo okreval, nato počasi pada (manj kot točka na dan); opozorila še nima, naslednji pregled je čez približno mesec.
+2. V pacientovem pogledu opraviva samopregled z namerno slabim sledenjem. Pacient na koncu prebere miren stavek, da gre zadnje dni nekoliko slabše.
+3. Preklop na pogled zdravnika: pacient je »Za pregled«, graf kaže počasen padec, naslednji pregled je šele čez mesec. Zdravnik lahko ukrepa prej.
+
+**Omejitev, ki jo poveva na odru:** prototip pacienta nikoli ne usmeri po pomoč. To je zavestna poenostavitev za predstavitev; v pravem izdelku bi nujna navodila določil klinik.
 
 ## 1. Kaj gradiva in zakaj
 
