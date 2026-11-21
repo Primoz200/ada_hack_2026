@@ -53,3 +53,69 @@
 
 **Spremembe:** v `.claude/skills/` ustvarjeni simbolni povezavi `impeccable` in `hallmark` → `.agents/skills/…`, da sta skilla na voljo tako v Codexu kot v Claude Code (`/impeccable`, `/hallmark`).
 **Ključno naučeno:** Claude Code bere skille iz `.claude/skills`, Codex iz `.agents/skills`; simbolna povezava odpravi podvajanje. Zaganjalnik skilla impeccable ob prvi uporabi prenese binarno datoteko.
+
+## 2026-11-21 (18.45) — Ogrodje platforme in orkestracija agentov (branch `matevz/platform`)
+
+**Odločitve (Matevž):**
+- Vso kodo platforme in ves frontend (tudi igro sledenja) implementira Matevž z agenti; Primož prispeva raziskavo, kontekst in ML modele v backendu. `IMPLEMENTATION_PLAN.md` posodobljen na v7.
+- Obseg tega zagona: jedro (poglavje 2) + »Simuliraj naslednjih 7 dni«. Igra s kamero ni vključena.
+- Način dela: Fable orkestrira, Sonnet agenti v ločenih worktreejih gradijo neodvisne komponente.
+
+**Narejeno (faza 0, commit `f7fe053`):**
+- `backend/`: FastAPI + SQLModel, tabele (`app/models/tables.py`), pogodba API v camelCase (`app/models/schemas.py`), routerji, podpisi storitev (`scoring`, `trend`, `alerts`, `ingest`, `clock`, `divergence`), majhen razvojni seed, dimni test.
+- `contracts/openapi.json` + `scripts/gen_contract.sh` (izvoz in generiranje TS tipov, `--check` za odstopanje pogodbe), `scripts/dev.sh`.
+- `frontend/`: Vite + React 19 + Tailwind 4 + shadcn + Recharts, vse poti registrirane, tipiziran odjemalec API, vmesnik iger (`games/shared/types.ts`), register iger, nadomestna igra.
+- Navpični rez deluje prek Vite proxyja (HTTPS): seja se shrani in vrne v časovnici.
+
+**V teku (faza 1, vzporedno):** pisalna pot (točkovanje, trend, opozorila), bralna pot (seznam za triažo, danes, napredek), pacientov vmesnik + igra sledenja, zdravnikov vmesnik. Sledi seed z 10 pacienti + simulacija, nato integracija.
+
+**Ključno naučeno:**
+- Python pripet na 3.12 z `uv` (sistemski je 3.15). SQLModel 0.0.50 zahteva časovne žige s časovnim pasom (UTC).
+- `openapi-typescript` zahteva TypeScript 5, aplikacija uporablja 7, zato se generator zažene zunaj projekta z `npx -p typescript@5`.
+- Kamera na telefonu: Vite teče s samopodpisanim HTTPS (`@vitejs/plugin-basic-ssl`), `/api` gre prek proxyja.
+
+## 2026-11-21 (19.45) — Platforma zgrajena z agenti in integrirana (branch `matevz/platform`)
+
+**Narejeno:** pet Sonnet agentov v worktreejih (pisalna pot, bralna pot, pacientov vmesnik + igra sledenja, zdravnikov vmesnik, seed + simulacija), vse združeno. Jedro iz poglavja 2 + »Simuliraj naslednjih 7 dni« deluje.
+- Backend: točkovalnik z adapterjem za Primožev model (`models.tracer.score.score_session`, sicer nadomestni), trend (izhodišče = mediana sej 2–4, EWMA 0,3, skupni trend), opozorila (rdeča / rumena / siva, eno odprto na pacienta, zaprtje samo z izidom), 10 determinističnih pacientov, ponastavitev in simulacija. 96 testov.
+- Frontend: Danes, dnevni vnos, igra sledenja (prst ali miška), Moj napredek; zdravnikov seznam za triažo in pogled pacienta z grafi, predvajanjem seje in zaprtjem opozorila. 30 testov.
+- `DEMO.md`: zagon, telefon, kontrole za demo.
+
+**Preverjeno v brskalniku (headless Chrome):** igra z miško od začetka do rezultata, zaprtje opozorila z izidom, seznam in pogled pacienta 3 s pravimi podatki; simulacija 7 dni pri demo pacientu sproži rumeno opozorilo.
+**Ni preverjeno:** dotik na pravem telefonu prek HTTPS.
+
+**Ključno naučeno:**
+- Agentovi worktreeji so nastali iz starejšega commita; vsak agent je moral najprej narediti fast-forward na `matevz/platform`. V navodilih agentu to zahtevaj izrecno.
+- React StrictMode v razvoju komponento priklopi dvakrat; platno igre je ostalo prazno, ker se ID animacijskega okvira ob odklopu ni ponastavil.
+- Baza se ob vsakem zagonu backenda ponastavi (`APP_KEEP_DB=1` jo ohrani); »danes« po simulaciji živi samo v pomnilniku.
+- Telefonska številka ambulante v pacientovem delu je nadomestna (`features/patient/shared.tsx`).
+
+**Odprto:** preizkus na telefonu; Primožev model (vmesnik v `scoring.py`); igra s kamero in ostali dodatki iz poglavja 2 niso narejeni.
+
+## 2026-11-21 (20.15) — Primožev model vklopljen, zadnji pregled v brskalniku
+
+- Združen `origin/main` (Primož: `backend/models/tracer` z naučenim GBM in CNN). Nov most `backend/app/services/tracer_model.py`: seje v živo točkuje `tracer-gbm-0.1`; ob napaki nadomestni točkovalnik. Dodana `scikit-learn` in `joblib`.
+- V brskalniku (headless Chrome, simulirani dogodki) preverjeno: vse tri stopnje igre (dotik in miška), dnevni vnos do »Poslano vašemu zdravniku«, celozaslonski »Takoj pokličite 112«, zaprtje opozorila z izidom, simulacija 7 dni po seji v živo še vedno sproži rumeno opozorilo.
+- Popravki: prazno platno igre v razvojnem načinu, podvojen naslov na zaslonu 112, razlog v seznamu po zaprtju opozorila, bolj gladke sintetične sledi, imena značilk usklajena s Primoževim modelom.
+- `vite.config.ts`: cilj proxyja se nastavi z `API_URL` (privzeto `http://localhost:8000`).
+
+## 2026-11-21 (22.15) — Redesign v8: samopregled, opozorila samo pri zdravniku, videz po zVEM
+
+**Odločitve (Matevž):** pacient nikoli ne dobi poziva h klicu in ne vidi alarmov; desktop first; pristajalna stran je pacientov pogled z izbirnikom pacienta levo zgoraj in preklopom na zdravnika desno zgoraj; pacient ima samo »Samopregled« (počutje + bolečina 1–10, nato tri igre sledenja; računalniški vid, ko ga Primož konča) in »Moj napredek«; »Simuliraj 7 dni« odstranjen; slab test v živo sproži opozorilo; »Nujno« = igra in počutje padata hkrati.
+**Način dela:** Fable orkestrira, trije agenti Opus (high) v worktreejih: backend, pacient, zdravnik. Oblikovanje s skillom impeccable; `PRODUCT.md` in `DESIGN.md` sta skupni oblikovni dogovor (po posnetkih zVEM: bela glava, modro-siva podlaga, veliki beli paneli, skrilasto modra, zelen poudarek, rdeč glavni gumb, Hanken Grotesk).
+
+**Narejeno:**
+- Pogodba v8 (`schemas.py`): `CheckinIn {wellbeing, pain}`, `/patients/{id}/home`, `/selfcheck/summary`, preprostejši `/progress`; brez opozorilnih znakov, skrbi, sporočil in simulacije.
+- Pravila opozoril: `trend_drop` (danes ≤ −10 in 2 od prejšnjih 3 dni ≤ −5), `subjective_drop`, rdeča `both` / `big_drop`, siva `no_data`. Skupni trend upošteva tudi stopnje, ki danes še niso odigrane (z zadnjo vrednostjo).
+- Mirna pacientova sporočila (`services/feedback.py`), brez številk; test preveri prepovedane besede.
+- Novi sintetični pacienti: Ivan Zupan (p3) tri tedne okreva, nato pada 0,85 točke na dan, ob ponastavitvi −8,6 brez opozorila, pregled čez 30 dni.
+- Pacient: Domov, čarovnik Samopregled, rezultat z mini grafom, Moj napredek. Zdravnik: vrstica = oznaka + ime + krivulji, poenostavljen okvir opozorila, poudarjen naslednji pregled, predvajanje sej ostane.
+
+**Preverjeno v brskalniku s pravim backendom (headless Chrome, simulirana miška):** površen samopregled pri Ivanu (ocene 53 / 51 / 52) → sporočilo »Zadnje dni gre nekoliko slabše« → pri zdravniku »Za pregled«, 14,6 točke pod izhodiščem; skrben samopregled (92 / 91 / 93) → brez opozorila, »Danes je šlo bolje«. Testi: 97 backend, 43 frontend.
+
+**Ključno naučeno:**
+- Javne strani zVEM se ne da prebrati s preprostim fetchom (JavaScript); posnetki zaslona od Matevža so bili odločilni.
+- Agenti za vmesnik so brez backenda delali z lastnim mock strežnikom in posnetki zaslona; prave podatke je treba preveriti ob integraciji (pri meni: odrezana oznaka na grafu, premajhne krivulje).
+- Prag za demo: opozorilo se sproži pri povprečni oceni pod približno 67; zato je bila Ivanova raven dvignjena.
+
+**Odprto:** igra z računalniškim vidom (mesto v čarovniku in pri zdravniku je pripravljeno); pravi telefon ni preverjen; `IMPLEMENTATION_PLAN.md` ima poglavje v8 na vrhu, starejša poglavja niso prepisana.

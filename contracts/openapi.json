@@ -1,0 +1,2340 @@
+{
+  "components": {
+    "schemas": {
+      "AlertAckIn": {
+        "properties": {
+          "clinicianId": {
+            "title": "Clinicianid",
+            "type": "string"
+          },
+          "close": {
+            "default": false,
+            "title": "Close",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "called_reassured",
+                  "adjusted_exercises",
+                  "visit_moved_earlier",
+                  "urgent_referral",
+                  "unreachable",
+                  "false_alarm"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          }
+        },
+        "required": [
+          "clinicianId"
+        ],
+        "title": "AlertAckIn",
+        "type": "object"
+      },
+      "AlertOut": {
+        "properties": {
+          "acknowledgedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledgedat"
+          },
+          "acknowledgedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledgedby"
+          },
+          "closedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedat"
+          },
+          "closedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedby"
+          },
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "diverging": {
+            "title": "Diverging",
+            "type": "boolean"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "openedDay": {
+            "format": "date",
+            "title": "Openedday",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "called_reassured",
+                  "adjusted_exercises",
+                  "visit_moved_earlier",
+                  "urgent_referral",
+                  "unreachable",
+                  "false_alarm"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "patientName": {
+            "title": "Patientname",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "red",
+              "yellow",
+              "grey"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "game",
+              "checkin",
+              "missing"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "new",
+              "acknowledged",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "patientId",
+          "patientName",
+          "source",
+          "rule",
+          "severity",
+          "status",
+          "reason",
+          "evidence",
+          "diverging",
+          "openedDay",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "AlertOut",
+        "type": "object"
+      },
+      "CheckinIn": {
+        "description": "The two ratings at the start of a self-check.",
+        "properties": {
+          "pain": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Pain",
+            "type": "integer"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "wellbeing": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Wellbeing",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "patientId",
+          "wellbeing",
+          "pain"
+        ],
+        "title": "CheckinIn",
+        "type": "object"
+      },
+      "CheckinOut": {
+        "properties": {
+          "answers": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Answers",
+            "type": "object"
+          },
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "patientId",
+          "day",
+          "createdAt",
+          "answers"
+        ],
+        "title": "CheckinOut",
+        "type": "object"
+      },
+      "CheckinResult": {
+        "properties": {
+          "checkinId": {
+            "title": "Checkinid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "checkinId"
+        ],
+        "title": "CheckinResult",
+        "type": "object"
+      },
+      "ClientMeta": {
+        "properties": {
+          "canvasH": {
+            "title": "Canvash",
+            "type": "number"
+          },
+          "canvasW": {
+            "title": "Canvasw",
+            "type": "number"
+          },
+          "devicePixelRatio": {
+            "default": 1.0,
+            "title": "Devicepixelratio",
+            "type": "number"
+          },
+          "inputDevice": {
+            "enum": [
+              "touch",
+              "mouse",
+              "camera"
+            ],
+            "title": "Inputdevice",
+            "type": "string"
+          },
+          "userAgent": {
+            "default": "",
+            "title": "Useragent",
+            "type": "string"
+          }
+        },
+        "required": [
+          "inputDevice",
+          "canvasW",
+          "canvasH"
+        ],
+        "title": "ClientMeta",
+        "type": "object"
+      },
+      "ClinicianOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role"
+        ],
+        "title": "ClinicianOut",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MetaOut": {
+        "properties": {
+          "clinicians": {
+            "items": {
+              "$ref": "#/components/schemas/ClinicianOut"
+            },
+            "title": "Clinicians",
+            "type": "array"
+          },
+          "defaultPatientId": {
+            "title": "Defaultpatientid",
+            "type": "string"
+          },
+          "modelVersion": {
+            "title": "Modelversion",
+            "type": "string"
+          },
+          "outcomes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Outcomes",
+            "type": "object"
+          },
+          "syntheticData": {
+            "default": true,
+            "title": "Syntheticdata",
+            "type": "boolean"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          }
+        },
+        "required": [
+          "today",
+          "clinicians",
+          "outcomes",
+          "modelVersion",
+          "defaultPatientId"
+        ],
+        "title": "MetaOut",
+        "type": "object"
+      },
+      "PathwayGame": {
+        "properties": {
+          "gameType": {
+            "enum": [
+              "trace",
+              "camera_tapping",
+              "camera_reach",
+              "motion"
+            ],
+            "title": "Gametype",
+            "type": "string"
+          },
+          "levels": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gameType",
+          "title",
+          "levels"
+        ],
+        "title": "PathwayGame",
+        "type": "object"
+      },
+      "PathwayOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "frequency": {
+            "title": "Frequency",
+            "type": "string"
+          },
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/PathwayGame"
+            },
+            "title": "Games",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/Question"
+            },
+            "title": "Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "frequency",
+          "games",
+          "questions"
+        ],
+        "title": "PathwayOut",
+        "type": "object"
+      },
+      "PatientDetail": {
+        "properties": {
+          "birthYear": {
+            "title": "Birthyear",
+            "type": "integer"
+          },
+          "daysSinceDischarge": {
+            "title": "Dayssincedischarge",
+            "type": "integer"
+          },
+          "daysToNextVisit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daystonextvisit"
+          },
+          "dischargeDate": {
+            "format": "date",
+            "title": "Dischargedate",
+            "type": "string"
+          },
+          "diverging": {
+            "title": "Diverging",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "isDemo": {
+            "title": "Isdemo",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nextVisitDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextvisitdate"
+          },
+          "openAlert": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pathway": {
+            "$ref": "#/components/schemas/PathwayOut"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "red",
+              "yellow",
+              "no_data",
+              "stable",
+              "insufficient_data"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PatientSummary"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "birthYear",
+          "pathway",
+          "side",
+          "dischargeDate",
+          "nextVisitDate",
+          "daysSinceDischarge",
+          "daysToNextVisit",
+          "status",
+          "reason",
+          "diverging",
+          "openAlert",
+          "summary",
+          "isDemo"
+        ],
+        "title": "PatientDetail",
+        "type": "object"
+      },
+      "PatientHomeOut": {
+        "properties": {
+          "hand": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Hand",
+            "type": "string"
+          },
+          "lastSelfcheckDay": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastselfcheckday"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pathwayCode": {
+            "title": "Pathwaycode",
+            "type": "string"
+          },
+          "pathwayName": {
+            "title": "Pathwayname",
+            "type": "string"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "selfcheckDoneToday": {
+            "title": "Selfcheckdonetoday",
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SelfcheckStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          }
+        },
+        "required": [
+          "patientId",
+          "name",
+          "pathwayCode",
+          "pathwayName",
+          "hand",
+          "today",
+          "steps",
+          "selfcheckDoneToday",
+          "lastSelfcheckDay"
+        ],
+        "title": "PatientHomeOut",
+        "type": "object"
+      },
+      "PatientListItem": {
+        "properties": {
+          "daysSinceDischarge": {
+            "title": "Dayssincedischarge",
+            "type": "integer"
+          },
+          "daysToNextVisit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daystonextvisit"
+          },
+          "diverging": {
+            "title": "Diverging",
+            "type": "boolean"
+          },
+          "gameSparkline": {
+            "items": {
+              "$ref": "#/components/schemas/SparkPoint"
+            },
+            "title": "Gamesparkline",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "isDemo": {
+            "title": "Isdemo",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "openAlertId": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openalertid"
+          },
+          "pathwayCode": {
+            "title": "Pathwaycode",
+            "type": "string"
+          },
+          "pathwayName": {
+            "title": "Pathwayname",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "red",
+              "yellow",
+              "no_data",
+              "stable",
+              "insufficient_data"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "wellbeingSparkline": {
+            "items": {
+              "$ref": "#/components/schemas/SparkPoint"
+            },
+            "title": "Wellbeingsparkline",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "pathwayCode",
+          "pathwayName",
+          "side",
+          "daysSinceDischarge",
+          "status",
+          "reason",
+          "diverging",
+          "gameSparkline",
+          "wellbeingSparkline",
+          "daysToNextVisit",
+          "openAlertId",
+          "isDemo"
+        ],
+        "title": "PatientListItem",
+        "type": "object"
+      },
+      "PatientListOut": {
+        "properties": {
+          "counters": {
+            "$ref": "#/components/schemas/TriageCounters"
+          },
+          "patients": {
+            "items": {
+              "$ref": "#/components/schemas/PatientListItem"
+            },
+            "title": "Patients",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          }
+        },
+        "required": [
+          "today",
+          "counters",
+          "patients"
+        ],
+        "title": "PatientListOut",
+        "type": "object"
+      },
+      "PatientSummary": {
+        "properties": {
+          "combinedDelta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Combineddelta"
+          },
+          "combinedDirection": {
+            "enum": [
+              "improving",
+              "stable",
+              "declining",
+              "insufficient_data"
+            ],
+            "title": "Combineddirection",
+            "type": "string"
+          },
+          "lastCheckinDay": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastcheckinday"
+          },
+          "lastSessionDay": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastsessionday"
+          },
+          "nCheckins": {
+            "title": "Ncheckins",
+            "type": "integer"
+          },
+          "nSessions": {
+            "title": "Nsessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "nSessions",
+          "nCheckins",
+          "lastSessionDay",
+          "lastCheckinDay",
+          "combinedDelta",
+          "combinedDirection"
+        ],
+        "title": "PatientSummary",
+        "type": "object"
+      },
+      "ProgressOut": {
+        "description": "\"Moj napredek\": a very simple dashboard.",
+        "properties": {
+          "clinicianReviewedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clinicianreviewedat"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "personalBestDay": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personalbestday"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "ratings": {
+            "items": {
+              "$ref": "#/components/schemas/RatingPoint"
+            },
+            "title": "Ratings",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "first",
+              "better",
+              "similar",
+              "lower"
+            ],
+            "title": "Tone",
+            "type": "string"
+          },
+          "trend": {
+            "enum": [
+              "improving",
+              "stable",
+              "declining",
+              "unknown"
+            ],
+            "title": "Trend",
+            "type": "string"
+          },
+          "weekDone": {
+            "title": "Weekdone",
+            "type": "integer"
+          },
+          "weekGoal": {
+            "title": "Weekgoal",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tone",
+          "trend",
+          "title",
+          "text",
+          "patientId",
+          "points",
+          "ratings",
+          "personalBestDay",
+          "weekDone",
+          "weekGoal",
+          "clinicianReviewedAt"
+        ],
+        "title": "ProgressOut",
+        "type": "object"
+      },
+      "ProgressPoint": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "label": {
+            "enum": [
+              "lower",
+              "usual",
+              "better"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "day",
+          "value",
+          "label"
+        ],
+        "title": "ProgressPoint",
+        "type": "object"
+      },
+      "Question": {
+        "description": "A daily rating. v8: every pathway has `wellbeing` and `pain`, both 1-10.",
+        "properties": {
+          "higherIsWorse": {
+            "default": true,
+            "title": "Higherisworse",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "scale",
+            "default": "scale",
+            "title": "Kind",
+            "type": "string"
+          },
+          "max": {
+            "default": 10,
+            "title": "Max",
+            "type": "integer"
+          },
+          "maxLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maxlabel"
+          },
+          "min": {
+            "default": 1,
+            "title": "Min",
+            "type": "integer"
+          },
+          "minLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minlabel"
+          },
+          "shortLabel": {
+            "title": "Shortlabel",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "shortLabel"
+        ],
+        "title": "Question",
+        "type": "object"
+      },
+      "RatingPoint": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "pain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pain"
+          },
+          "wellbeing": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wellbeing"
+          }
+        },
+        "required": [
+          "day",
+          "wellbeing",
+          "pain"
+        ],
+        "title": "RatingPoint",
+        "type": "object"
+      },
+      "ResetOut": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "patients": {
+            "title": "Patients",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "patients"
+        ],
+        "title": "ResetOut",
+        "type": "object"
+      },
+      "SelfcheckStep": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          },
+          "gameType": {
+            "anyOf": [
+              {
+                "enum": [
+                  "trace",
+                  "camera_tapping",
+                  "camera_reach",
+                  "motion"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gametype"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "ratings",
+              "game"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "done"
+        ],
+        "title": "SelfcheckStep",
+        "type": "object"
+      },
+      "SelfcheckSummary": {
+        "description": "Shown once at the end of the self-check: how it went compared with previous days.",
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "levelsDone": {
+            "title": "Levelsdone",
+            "type": "integer"
+          },
+          "levelsTotal": {
+            "title": "Levelstotal",
+            "type": "integer"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tone": {
+            "enum": [
+              "first",
+              "better",
+              "similar",
+              "lower"
+            ],
+            "title": "Tone",
+            "type": "string"
+          },
+          "trend": {
+            "enum": [
+              "improving",
+              "stable",
+              "declining",
+              "unknown"
+            ],
+            "title": "Trend",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tone",
+          "trend",
+          "title",
+          "text",
+          "patientId",
+          "day",
+          "levelsDone",
+          "levelsTotal",
+          "points"
+        ],
+        "title": "SelfcheckSummary",
+        "type": "object"
+      },
+      "SessionIn": {
+        "description": "GameResult (plan section 5) + patientId.",
+        "properties": {
+          "abortReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abortreason"
+          },
+          "clientMeta": {
+            "$ref": "#/components/schemas/ClientMeta"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "durationMs": {
+            "minimum": 0.0,
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "gameType": {
+            "enum": [
+              "trace",
+              "camera_tapping",
+              "camera_reach",
+              "motion"
+            ],
+            "title": "Gametype",
+            "type": "string"
+          },
+          "hand": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Hand",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "series": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Series",
+            "type": "object"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "title": "Startedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "patientId",
+          "gameType",
+          "level",
+          "hand",
+          "startedAt",
+          "durationMs",
+          "completed",
+          "series",
+          "clientMeta"
+        ],
+        "title": "SessionIn",
+        "type": "object"
+      },
+      "SessionRawOut": {
+        "properties": {
+          "clientMeta": {
+            "additionalProperties": true,
+            "title": "Clientmeta",
+            "type": "object"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "gameType": {
+            "enum": [
+              "trace",
+              "camera_tapping",
+              "camera_reach",
+              "motion"
+            ],
+            "title": "Gametype",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "series": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Series",
+            "type": "object"
+          },
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessionId",
+          "patientId",
+          "gameType",
+          "level",
+          "day",
+          "score",
+          "series",
+          "clientMeta"
+        ],
+        "title": "SessionRawOut",
+        "type": "object"
+      },
+      "SessionResult": {
+        "properties": {
+          "scored": {
+            "title": "Scored",
+            "type": "boolean"
+          },
+          "sessionId": {
+            "title": "Sessionid",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessionId",
+          "scored"
+        ],
+        "title": "SessionResult",
+        "type": "object"
+      },
+      "SessionSummary": {
+        "description": "A game session WITHOUT raw series.",
+        "properties": {
+          "abortReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abortreason"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "countsForTrend": {
+            "title": "Countsfortrend",
+            "type": "boolean"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "durationMs": {
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "features": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Features",
+            "type": "object"
+          },
+          "gameType": {
+            "enum": [
+              "trace",
+              "camera_tapping",
+              "camera_reach",
+              "motion"
+            ],
+            "title": "Gametype",
+            "type": "string"
+          },
+          "hand": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Hand",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "impairmentClass": {
+            "anyOf": [
+              {
+                "enum": [
+                  "normal",
+                  "mild",
+                  "moderate",
+                  "severe"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impairmentclass"
+          },
+          "inputDevice": {
+            "enum": [
+              "touch",
+              "mouse",
+              "camera"
+            ],
+            "title": "Inputdevice",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "modelVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelversion"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "startedAt": {
+            "title": "Startedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "gameType",
+          "level",
+          "hand",
+          "day",
+          "startedAt",
+          "durationMs",
+          "completed",
+          "abortReason",
+          "inputDevice",
+          "score",
+          "impairmentClass",
+          "modelVersion",
+          "features",
+          "countsForTrend"
+        ],
+        "title": "SessionSummary",
+        "type": "object"
+      },
+      "SparkPoint": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "day",
+          "value"
+        ],
+        "title": "SparkPoint",
+        "type": "object"
+      },
+      "TimelineOut": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertOut"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "checkins": {
+            "items": {
+              "$ref": "#/components/schemas/CheckinOut"
+            },
+            "title": "Checkins",
+            "type": "array"
+          },
+          "dischargeDate": {
+            "format": "date",
+            "title": "Dischargedate",
+            "type": "string"
+          },
+          "nextVisitDate": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextvisitdate"
+          },
+          "patientId": {
+            "title": "Patientid",
+            "type": "string"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionSummary"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          },
+          "trends": {
+            "items": {
+              "$ref": "#/components/schemas/TrendPoint"
+            },
+            "title": "Trends",
+            "type": "array"
+          }
+        },
+        "required": [
+          "patientId",
+          "today",
+          "dischargeDate",
+          "nextVisitDate",
+          "sessions",
+          "checkins",
+          "trends",
+          "alerts"
+        ],
+        "title": "TimelineOut",
+        "type": "object"
+      },
+      "TrendPoint": {
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "deltaPct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deltapct"
+          },
+          "direction": {
+            "enum": [
+              "improving",
+              "stable",
+              "declining",
+              "insufficient_data"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "ewma": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ewma"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "nSessions": {
+            "title": "Nsessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "metric",
+          "day",
+          "nSessions",
+          "baseline",
+          "ewma",
+          "delta",
+          "deltaPct",
+          "direction"
+        ],
+        "title": "TrendPoint",
+        "type": "object"
+      },
+      "TriageCounters": {
+        "properties": {
+          "needsAttention": {
+            "title": "Needsattention",
+            "type": "integer"
+          },
+          "noData": {
+            "title": "Nodata",
+            "type": "integer"
+          },
+          "stable": {
+            "title": "Stable",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "needsAttention",
+          "noData",
+          "stable",
+          "total"
+        ],
+        "title": "TriageCounters",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Raziskovalni prototip na sintetičnih podatkih.",
+    "title": "Platforma za spremljanje pacientov po odpustu",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/admin/reset": {
+      "post": {
+        "operationId": "resetDemo",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset Demo",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/alerts": {
+      "get": {
+        "operationId": "listAlerts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "closed",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertOut"
+                  },
+                  "title": "Response Listalerts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Alerts",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/alerts/{alert_id}/ack": {
+      "post": {
+        "operationId": "ackAlert",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "alert_id",
+            "required": true,
+            "schema": {
+              "title": "Alert Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertAckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ack Alert",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/checkins": {
+      "post": {
+        "operationId": "createCheckin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckinResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Checkin",
+        "tags": [
+          "checkins"
+        ]
+      }
+    },
+    "/api/meta": {
+      "get": {
+        "operationId": "getMeta",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Meta",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/pathways": {
+      "get": {
+        "operationId": "listPathways",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PathwayOut"
+                  },
+                  "title": "Response Listpathways",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Pathways",
+        "tags": [
+          "pathways"
+        ]
+      }
+    },
+    "/api/patients": {
+      "get": {
+        "operationId": "listPatients",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Patients",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
+    "/api/patients/{patient_id}": {
+      "get": {
+        "operationId": "getPatient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Patient",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
+    "/api/patients/{patient_id}/home": {
+      "get": {
+        "description": "Patient landing page: name and today's self-check steps.",
+        "operationId": "getPatientHome",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientHomeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Home",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
+    "/api/patients/{patient_id}/progress": {
+      "get": {
+        "description": "\"Moj napredek\": a very simple dashboard.",
+        "operationId": "getProgress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProgressOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Progress",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
+    "/api/patients/{patient_id}/selfcheck/summary": {
+      "get": {
+        "description": "How today's self-check went compared with previous days (shown at the end).",
+        "operationId": "getSelfcheckSummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfcheckSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Selfcheck Summary",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
+    "/api/patients/{patient_id}/timeline": {
+      "get": {
+        "operationId": "getTimeline",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "patient_id",
+            "required": true,
+            "schema": {
+              "title": "Patient Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Timeline",
+        "tags": [
+          "patients"
+        ]
+      }
+    },
+    "/api/sessions": {
+      "post": {
+        "operationId": "createSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/api/sessions/{session_id}/raw": {
+      "get": {
+        "operationId": "getSessionRaw",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRawOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session Raw",
+        "tags": [
+          "sessions"
+        ]
+      }
+    }
+  }
+}
