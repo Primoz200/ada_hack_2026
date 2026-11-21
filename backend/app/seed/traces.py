@@ -72,7 +72,7 @@ def synthetic_trace(level: int, wobble: float, duration_ms: float | None = None,
     xs, ys, strokes, sid = [], [], [], 0
     for i, (px, py, nx, ny, u) in enumerate(_arc_points(path, n)):
         off = wobble * (0.65 * math.sin(2 * math.pi * f1 * u + p1) + 0.35 * math.sin(2 * math.pi * f2 * u + p2))
-        off += rng.gauss(0, wobble * 0.25)
+        off += rng.gauss(0, wobble * 0.08)  # little jitter: real traces drift, they do not zigzag
         xs.append(round(min(1.0, max(0.0, px + nx * off)), 4))
         ys.append(round(min(1.0, max(0.0, py + ny * off)), 4))
         if i in lift_at:

@@ -20,7 +20,7 @@ export default defineConfig({
     host: true,
     port: 5173,
     fs: { allow: ['..'] },
-    proxy: { '/api': 'http://localhost:8000' },
+    proxy: { '/api': process.env.API_URL ?? 'http://localhost:8000' },
   },
   test: { environment: 'jsdom', include: ['src/**/*.test.{ts,tsx}'] },
 })

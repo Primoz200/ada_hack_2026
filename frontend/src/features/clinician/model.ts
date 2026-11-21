@@ -213,6 +213,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   corner_slowdown: 'Upočasnitev v ovinkih',
   speed_fluct: 'Nihanje hitrosti',
   pause_rate_hz: 'Pogostost postankov',
+  lifts: 'Dvigi prsta',
   pause_max_s: 'Najdaljši postanek (s)',
   lateral_sd_frac: 'Bočno odstopanje',
   overshoot_frac: 'Prekoračitve',

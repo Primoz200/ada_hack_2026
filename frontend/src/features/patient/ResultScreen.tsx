@@ -22,7 +22,7 @@ export function ResultScreen({ result, todayPath }: { result: CheckinResult; tod
           Takoj pokličite 112
         </h1>
         <div className="space-y-2 text-xl">
-          <p className="font-semibold">{title}</p>
+          {title.trim() !== 'Takoj pokličite 112' && <p className="font-semibold">{title}</p>}
           <p>{text}</p>
         </div>
         <Button
