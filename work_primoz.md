@@ -31,3 +31,9 @@
 **Tehnične opombe:** v vsaki seji meriti dejanski fps (timestampi), pod ~20 fps opozorilo/nizka kakovost; uporabljati timestampe in prevzorčiti na 30 Hz; v sintetičnem generatorju simulirati 15–30 fps z jitterjem, izpadi sličic in šumom landmarkov.
 
 **Naslednji korak:** generator sintetičnih podatkov za tracer igro + baseline model.
+
+## 2026-11-21 — Tracer: specifikacija podatkov (branch `tracer-synthetic-data`)
+
+- Napisan `docs/tracer_data_spec.md` (format poskusa: patient_id, level_id, started_at, completed, samples t/x/y/down v logičnih enotah 0–1000, ~60 Hz rAF) in `shared/tracer_levels.json` (line, circle, maze; kanal 60 enot).
+- Odločitve: fiksne oblike, ena roka, en poskus na stopnjo, držanje gumba, natančnost glavni signal, POST po vsakem poskusu.
+- Naslednji korak: generator sintetičnih podatkov v istem formatu + `label`.
