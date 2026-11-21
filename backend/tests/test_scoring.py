@@ -65,8 +65,10 @@ def test_external_failure_falls_back_to_standin(monkeypatch, bad):
     assert scoring.current_model_version() == scoring.STANDIN_VERSION
 
 
-def test_missing_model_module_is_not_an_error(monkeypatch):
+def test_real_tracer_model_loads_and_scores(monkeypatch):
     monkeypatch.setitem(scoring._hook, "tried", False)
     monkeypatch.setitem(scoring._hook, "fn", None)
     r = scoring.score_session("trace", 1, "right", 10_000, trace(0.012), {})
-    assert r.model_version == scoring.STANDIN_VERSION
+    # Primož's trained model (backend/models/tracer/artifacts) is picked up through the bridge
+    assert r.model_version.startswith("tracer-gbm")
+    assert 0 <= r.score <= 100 and "dev_rms" in r.features

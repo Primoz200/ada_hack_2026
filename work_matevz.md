@@ -91,3 +91,10 @@
 - Telefonska številka ambulante v pacientovem delu je nadomestna (`features/patient/shared.tsx`).
 
 **Odprto:** preizkus na telefonu; Primožev model (vmesnik v `scoring.py`); igra s kamero in ostali dodatki iz poglavja 2 niso narejeni.
+
+## 2026-11-21 (20.15) — Primožev model vklopljen, zadnji pregled v brskalniku
+
+- Združen `origin/main` (Primož: `backend/models/tracer` z naučenim GBM in CNN). Nov most `backend/app/services/tracer_model.py`: seje v živo točkuje `tracer-gbm-0.1`; ob napaki nadomestni točkovalnik. Dodana `scikit-learn` in `joblib`.
+- V brskalniku (headless Chrome, simulirani dogodki) preverjeno: vse tri stopnje igre (dotik in miška), dnevni vnos do »Poslano vašemu zdravniku«, celozaslonski »Takoj pokličite 112«, zaprtje opozorila z izidom, simulacija 7 dni po seji v živo še vedno sproži rumeno opozorilo.
+- Popravki: prazno platno igre v razvojnem načinu, podvojen naslov na zaslonu 112, razlog v seznamu po zaprtju opozorila, bolj gladke sintetične sledi, imena značilk usklajena s Primoževim modelom.
+- `vite.config.ts`: cilj proxyja se nastavi z `API_URL` (privzeto `http://localhost:8000`).

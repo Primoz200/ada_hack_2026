@@ -50,7 +50,11 @@ def _load_hook() -> Optional[Callable]:
         if (base / "models" / "tracer" / "score.py").exists() and str(base) not in sys.path:
             sys.path.append(str(base))
     try:
-        mod = importlib.import_module("models.tracer.score")
+        try:  # bridge to Primož's trained model (backend/models/tracer)
+            mod = importlib.import_module("app.services.tracer_model")
+        except Exception as e:
+            log.info("tracer model bridge unavailable (%s); trying models.tracer.score", e)
+            mod = importlib.import_module("models.tracer.score")
         fn = getattr(mod, "score_session")
         _hook["fn"] = fn
         _hook["version"] = str(getattr(mod, "MODEL_VERSION", "") or "tracer-model")

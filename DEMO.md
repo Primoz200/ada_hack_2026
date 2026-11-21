@@ -57,4 +57,6 @@ Uredi `backend/app/models/schemas.py`, nato `./scripts/gen_contract.sh` in commi
 
 ## Primožev model
 
-Platforma kliče `app/services/scoring.py`. Ta poskusi uvoziti `score_session` iz modula `models.tracer.score`; če ga ni ali vrže napako, uporabi nadomestni točkovalnik. Vmesnik je v `IMPLEMENTATION_PLAN.md`, poglavje 5.
+Seje v živo točkuje Primožev model (gradient boosting na 20 značilkah, `backend/models/tracer/artifacts/tracer_gbm.joblib`). Most je `backend/app/services/tracer_model.py`: uporabi njegov `features.py` in naložen model. Če se model ne naloži ali vrže napako, `app/services/scoring.py` tiho preklopi na nadomestni točkovalnik; katera različica je aktivna, pove `GET /api/meta` (`modelVersion`) in kartica »i« pri zdravniku.
+
+Sintetični pacienti imajo ocene iz krivulje zgodbe (ne iz modela), trend in opozorila pa tečejo skozi isto kodo kot v živo.

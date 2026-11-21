@@ -31,6 +31,17 @@ def _hour(pid: str) -> int:
     return 8 + sum(map(ord, pid)) % 9
 
 
+def _stored_features(feats: dict[str, float]) -> dict[str, float]:
+    """Seeded features under the same names as Primož's model (backend/models/tracer/features.py),
+    so seeded and live sessions show the same rows in the clinician's feature table."""
+    return {
+        "dev_mean": round(feats["mean_dev"] / 0.06, 3),  # in channel widths
+        "duration_s": feats["duration_s"],
+        "n_pauses": float(round(feats["pause_rate_hz"] * feats["duration_s"] / 4)),
+        "n_lifts": feats["lifts"],
+    }
+
+
 def write_day(db: Session, story: st.Story, k: int, day: date,
               decline: tuple[int, float] | None = None) -> tuple[int, int]:
     """Write the story's entries for day index k through the real write path.
@@ -60,7 +71,7 @@ def write_day(db: Session, story: st.Story, k: int, day: date,
                       started_at=when, duration_ms=duration_ms, completed=True, series=series,
                       client_meta=meta),
             day=day, created_at=when,
-            preset_score=ScoreResult(feats, score, score_to_class(score), STANDIN_VERSION))
+            preset_score=ScoreResult(_stored_features(feats), score, score_to_class(score), STANDIN_VERSION))
         n_sessions += 1
     return 1, n_sessions
 
