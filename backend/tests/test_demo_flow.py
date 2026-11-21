@@ -3,7 +3,12 @@
 reset -> p3 (slow decline, visit in a month) has no alert -> one sloppy self-check ->
 the patient is told calmly that it is going a bit worse lately, the clinician sees p3 as
 "Za pregled" (yellow trend_drop). A careful or average self-check opens nothing.
+p3 also does the camera exercises (a few points below baseline, no alert): a good hand
+exercise on top of a sloppy tracing changes nothing about the yellow from tracing.
 """
+import json
+from pathlib import Path
+
 import pytest
 from sqlmodel import Session, select
 
@@ -35,18 +40,39 @@ def _p3(client):
     return next(p for p in client.get("/api/patients").json()["patients"] if p["id"] == "p3")
 
 
-def _todays_sessions():
+RECORDINGS = Path(__file__).resolve().parents[1] / "models" / "data" / "camera" / "recordings"
+GOOD_HAND = RECORDINGS / "20261121-194808-033_hand_open_close_right_reference_P01.json"  # healthy reference, 100
+
+
+def _todays_sessions(game="trace"):
     with Session(dbmod.engine) as db:
         return db.exec(select(GameSession).where(GameSession.patient_id == "p3",
+                                                 GameSession.game_type == game,
                                                  GameSession.day == clock.today())
                        .order_by(GameSession.level)).all()
 
 
-def _combined_today():
+def _combined_today(game="trace"):
     with Session(dbmod.engine) as db:
         return db.exec(select(TrendSnapshot).where(
-            TrendSnapshot.patient_id == "p3", TrendSnapshot.metric == "trace:all",
+            TrendSnapshot.patient_id == "p3", TrendSnapshot.metric == f"{game}:all",
             TrendSnapshot.day == clock.today())).one().delta
+
+
+def _camera_yesterday():
+    with Session(dbmod.engine) as db:
+        return db.exec(select(TrendSnapshot).where(
+            TrendSnapshot.patient_id == "p3", TrendSnapshot.metric == "camera:all",
+            TrendSnapshot.day < clock.today()).order_by(TrendSnapshot.day.desc())).first().delta
+
+
+def _post_recording(client, path):
+    rec = json.loads(path.read_text())
+    body = {k: rec[k] for k in ("gameType", "level", "hand", "startedAt", "durationMs", "completed",
+                                "series", "clientMeta")}
+    r = client.post("/api/sessions", json={**body, "patientId": "p3"})
+    assert r.status_code == 200, r.text
+    return rec, r.json()
 
 
 def _selfcheck(client, traces, wellbeing=7, pain=2):
@@ -68,6 +94,26 @@ def _reset_and_check_start(client):
     assert p["daysToNextVisit"] >= 28
     assert client.get("/api/patients/p3/timeline").json()["alerts"] == []
     assert client.get("/api/patients/p3/home").json()["selfcheckDoneToday"] is False
+    # p3 is followed on both measurements: camera a few points below its baseline, no alert
+    assert p["cameraSparkline"] and -6 <= p["cameraSparkline"][-1]["value"] <= -3
+
+
+def _sloppy_and_check_yellow_from_tracing(client, states):
+    rows = _todays_sessions()
+    assert all(s is None or s[0] != "red" for s in states), states  # never red on the way
+    assert states[-1] == ("yellow", "trend_drop")
+    p = _p3(client)
+    assert p["status"] == "yellow" and p["openAlertId"] and p["daysToNextVisit"] >= 28
+    alert = client.get("/api/patients/p3").json()["openAlert"]
+    ev = alert["evidence"]
+    assert ev["delta"] == round(_combined_today(), 1)  # follows all three sessions, not the first
+    assert {r.id for r in rows} <= set(ev["sessionIds"])
+    # the yellow comes from tracing alone: the camera exercises are not in a drop
+    assert set(ev["games"]) == {"trace"} and ev["games"]["trace"]["delta"] == ev["delta"]
+    assert {t.get("game") for t in ev["triggers"]} == {"trace"}
+    assert alert["reason"] == "Rezultati sledenja so že več dni pod pacientovim izhodiščem."
+    assert client.get("/api/patients").json()["counters"]["needsAttention"] == 3
+    return alert
 
 
 def test_sloppy_selfcheck_opens_yellow_and_patient_hears_it_calmly(client):
@@ -87,11 +133,37 @@ def test_sloppy_selfcheck_opens_yellow_and_patient_hears_it_calmly(client):
     assert ev["delta"] == round(_combined_today(), 1)  # follows all three sessions, not the first
     assert {r.id for r in rows} <= set(ev["sessionIds"])
     assert client.get("/api/patients").json()["counters"]["needsAttention"] == 3
+    _sloppy_and_check_yellow_from_tracing(client, states)
     summary = client.get("/api/patients/p3/selfcheck/summary").json()
     assert summary["trend"] == "declining" and summary["tone"] == "lower"
     assert summary["text"] == "Danes je šlo težje in zadnje dni gre nekoliko slabše kot prej. " \
                               "Vaš zdravnik ima vpogled v rezultate."
-    assert (summary["levelsDone"], summary["levelsTotal"]) == (3, 3)
+    # 3 of 6 game steps (tracing done, camera not): the self-check counts as done anyway
+    assert (summary["levelsDone"], summary["levelsTotal"]) == (3, 6)
+    assert [g["gameType"] for g in summary["games"]] == ["trace", "camera"]
+    assert summary["games"][0]["trend"] == "declining"
+    assert client.get("/api/patients/p3/home").json()["selfcheckDoneToday"] is True
+
+
+def test_sloppy_tracing_plus_a_good_hand_exercise_stays_yellow_from_tracing(client):
+    _reset_and_check_start(client)
+    before = _camera_yesterday()
+    states = _selfcheck(client, SLOPPY)
+    rec, res = _post_recording(client, GOOD_HAND)  # the presenter also does the hand exercise
+    assert res["scored"] is True
+    [hand] = _todays_sessions("camera")
+    assert hand.score == pytest.approx(rec["result"]["score"], abs=0.1) and hand.quality_ok is True
+    assert hand.model_version == rec["result"]["model_version"]
+    assert _combined_today("camera") > before  # a good hand exercise lifts the camera trend
+    detail = client.get("/api/patients/p3").json()
+    states.append((detail["openAlert"]["severity"], detail["openAlert"]["rule"]))
+    _sloppy_and_check_yellow_from_tracing(client, states)
+    summary = client.get("/api/patients/p3/selfcheck/summary").json()
+    assert (summary["levelsDone"], summary["levelsTotal"]) == (4, 6)
+    assert summary["trend"] == "declining"  # the tracing is declining (said calmly)
+    trace, camera = summary["games"]
+    assert (trace["gameType"], trace["trend"]) == ("trace", "declining")
+    assert camera["gameType"] == "camera" and camera["trend"] != "declining"
     assert client.get("/api/patients/p3/home").json()["selfcheckDoneToday"] is True
 
 

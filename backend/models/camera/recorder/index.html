@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snemalnik kamere</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Snemalnik kamere</h1>
+  <span id="status" class="pill">nalagam …</span>
+</header>
+
+<main>
+  <section class="panel" id="setup">
+    <label>Vaja
+      <select id="exercise"></select>
+    </label>
+    <fieldset>
+      <legend>Roka / stran</legend>
+      <label class="inline"><input type="radio" name="hand" value="right" checked> desna</label>
+      <label class="inline"><input type="radio" name="hand" value="left"> leva</label>
+    </fieldset>
+    <label>Vloga posnetka
+      <select id="role">
+        <option value="reference">reference (pravilen, zdrav gib)</option>
+        <option value="patient">patient (testni »pacient«)</option>
+        <option value="test">test (poskus, ne šteje)</option>
+      </select>
+    </label>
+    <label>Oseba (koda)
+      <input id="subject" value="P01" maxlength="24">
+    </label>
+    <label>Opomba
+      <input id="note" placeholder="npr. namerno majhen razpon">
+    </label>
+    <label class="inline"><input type="checkbox" id="saveVideo" checked> shrani tudi video (.webm, samo lokalno)</label>
+
+    <p id="instructions" class="muted"></p>
+
+    <div class="buttons">
+      <button id="btnCamera">Vklopi kamero</button>
+      <button id="btnRecord" disabled>Snemaj</button>
+      <button id="btnStop" disabled>Ustavi</button>
+      <button id="btnCancel" class="ghost" disabled>Prekliči</button>
+    </div>
+    <div id="frameCheck" class="muted">kamera izklopljena</div>
+  </section>
+
+  <section id="stageWrap">
+    <div id="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="prompt"></div>
+      <div id="progress"><div></div></div>
+    </div>
+  </section>
+
+  <section class="panel" id="resultPanel">
+    <h2>Rezultat</h2>
+    <div id="result" class="muted">še ni posnetka</div>
+  </section>
+</main>
+
+<section class="panel" id="listPanel">
+  <div class="row">
+    <h2>Posnetki</h2>
+    <button id="btnRebuild" class="ghost">Ponovno zgradi referenco</button>
+    <button id="btnRefresh" class="ghost">Osveži</button>
+  </div>
+  <div id="refInfo" class="muted"></div>
+  <table id="list"><thead><tr>
+    <th>id</th><th>vloga</th><th>ocena</th><th>kakovost</th><th>video</th><th></th>
+  </tr></thead><tbody></tbody></table>
+</section>
+
+<script type="module" src="recorder.js"></script>
+</body>
+</html>

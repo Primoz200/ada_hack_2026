@@ -23,7 +23,16 @@ import {
   trendSummary,
   visitWhen,
   dayMs,
+  alertGames,
+  cameraSessionFacts,
+  countingSessions,
+  defaultMeasurement,
+  featureLabel,
+  hasGameData,
+  latestModelVersion,
+  ruleLabel,
   GAME_SPARK_DOMAIN,
+  POOR_LANE,
   SPARK_DAYS,
 } from './model'
 
@@ -49,8 +58,67 @@ const sessions: SessionSummary[] = Array.from({ length: 10 }, (_, i) => {
     modelVersion: 'standin-1',
     features: { mean_dev: 0.02 + i * 0.004, duration_s: 30 + i * 1.5, pause_rate_hz: 0.1 },
     countsForTrend: i > 0,
+    qualityOk: null,
   }
 })
+
+// Camera exercises for the same patient: "Dlan" (level 1) daily-ish, slowly worse; one session with poor capture
+// (stored, no score, does not count); "Roke v stran" (level 2) a few times.
+const camHand: SessionSummary[] = Array.from({ length: 8 }, (_, i) => {
+  const q = i < 5 ? 0.9 : 0.9 - (i - 4) * 0.08
+  return {
+    id: 100 + i,
+    gameType: 'camera',
+    level: 1,
+    hand: 'right',
+    day: iso(i * 3 + 1),
+    startedAt: `${iso(i * 3 + 1)}T09:10:00Z`,
+    durationMs: 24000,
+    completed: true,
+    abortReason: null,
+    inputDevice: 'camera',
+    score: Math.round(q * 100),
+    impairmentClass: 'normal',
+    modelVersion: i === 7 ? 'camera-rules-0.3' : 'camera-rules-0.2',
+    features: { open_level: 1.0 + q * 0.5, fist_level: 0.72 + (1 - q), n_reps: 7, fps: 20, detect_frac: 1, part_open: q, part_close: q + 0.05, part_reps: 1 },
+    countsForTrend: true,
+    qualityOk: true,
+  }
+})
+const camPoor: SessionSummary = {
+  ...camHand[3],
+  id: 150,
+  day: iso(11),
+  startedAt: `${iso(11)}T09:30:00Z`,
+  score: null,
+  impairmentClass: null,
+  countsForTrend: false,
+  qualityOk: false,
+  features: { fps: 9.4, detect_frac: 0.52, quality_ok: 0, open_level: 0.2 },
+}
+const camArms: SessionSummary[] = [0, 1].map((i) => ({
+  ...camHand[0],
+  id: 200 + i,
+  level: 2,
+  durationMs: 42000,
+  day: iso(i * 6 + 2),
+  startedAt: `${iso(i * 6 + 2)}T09:20:00Z`,
+  score: 80,
+  features: { top_level: 100, n_reps: 4, lean_deg: 6.5, part_position: 0.81, part_reps: 0.8, part_lean_penalty: 0.04, part_hike_penalty: 0 },
+}))
+const cameraSessions = [...camHand, camPoor, ...camArms]
+
+const cameraTrends: TrendPoint[] = camHand.map((s, i): TrendPoint => ({
+  metric: 'camera:all',
+  day: s.day,
+  nSessions: i + 1,
+  baseline: null,
+  ewma: null,
+  delta: i >= 3 ? (s.score as number) - 90 : null,
+  deltaPct: null,
+  direction: 'stable',
+}))
+cameraTrends.push(...camHand.map((s, i): TrendPoint => ({ ...cameraTrends[i], metric: 'camera:1', baseline: i >= 3 ? 90 : null, ewma: s.score })))
 
 const trends: TrendPoint[] = [
   ...sessions.map((s, i): TrendPoint => ({
@@ -128,7 +196,7 @@ const questions: Question[] = [
 describe('triage list', () => {
   const mk = (id: string, status: PatientListItem['status']): PatientListItem => ({
     id, name: id, pathwayCode: 'stroke', pathwayName: 'Kap', side: 'right', daysSinceDischarge: 10, status,
-    reason: '', diverging: false, gameSparkline: [], wellbeingSparkline: [], daysToNextVisit: null, openAlertId: null, isDemo: false,
+    reason: '', diverging: false, gameSparkline: [], cameraSparkline: [], wellbeingSparkline: [], daysToNextVisit: null, openAlertId: null, isDemo: false,
   })
   it('filters tabs and picks the default', () => {
     const ps = [mk('a', 'yellow'), mk('b', 'stable'), mk('c', 'no_data'), mk('d', 'red')]
@@ -289,5 +357,149 @@ describe('alert evidence and action log', () => {
     expect(log[0].text).toContain('Poklical, pomiril')
     expect(log[0].detail).toBe('Pomiril.')
     expect(log[1].text).toContain('dr. Novak')
+  })
+})
+
+describe('camera exercises: a second measurement with its own trend', () => {
+  const all = [...sessions, ...cameraSessions]
+  const allTrends = [...trends, ...cameraTrends]
+
+  it('keeps the games apart in the chart rows', () => {
+    // tracing level 1 never picks up camera level 1 ("Dlan")
+    expect(levelRows(1, all, allTrends).filter((r) => r.score != null)).toHaveLength(10)
+    const cam = levelRows(1, all, allTrends, 'camera')
+    expect(cam.filter((r) => r.score != null)).toHaveLength(8)
+    expect(cam.filter((r) => r.ewma != null)).toHaveLength(8)
+    // the poor-quality session is there, hollow, in the bottom lane, never as a score
+    expect(cam.filter((r) => r.poor != null)).toEqual([{ t: dayMs(iso(11)), day: iso(11), poor: POOR_LANE, sessionId: 150 }])
+    expect(combinedRows(allTrends, 'camera', all).filter((r) => r.delta != null).map((r) => r.delta)).toEqual([0, 0, -8, -16, -24])
+    expect(combinedRows(allTrends, 'camera', all).some((r) => r.poor != null)).toBe(true)
+    expect(combinedRows(allTrends)).toHaveLength(10) // tracing unchanged
+    expect(trendSummary(allTrends, 'camera:all')).toMatchObject({ delta: -24, nSessions: 8 })
+  })
+  it('counts only good-quality camera sessions', () => {
+    expect(countingSessions(all, 'camera').map((s) => s.id)).not.toContain(150)
+    expect(countingSessions(all, 'camera')).toHaveLength(10)
+    expect(countingSessions(all, 'trace')).toHaveLength(10)
+  })
+  it('knows whether a patient has camera data and which rules version scored it last', () => {
+    expect(hasGameData({ sessions: all, trends: allTrends }, 'camera')).toBe(true)
+    expect(hasGameData({ sessions, trends }, 'camera')).toBe(false)
+    expect(hasGameData({ sessions: [], trends: cameraTrends }, 'camera')).toBe(true)
+    expect(latestModelVersion(all, 'camera')).toBe('camera-rules-0.3')
+    expect(latestModelVersion(sessions, 'camera')).toBeNull()
+  })
+  it('compares movement features only, with Slovenian labels, without the poor session', () => {
+    const c = featureComparison(all, 1, 10, 'camera')
+    const keys = c.rows.map((r) => r.key)
+    expect(keys).not.toContain('fps')
+    expect(keys).not.toContain('detect_frac')
+    expect(keys).toContain('open_level')
+    expect(c.rows.find((r) => r.key === 'open_level')?.label).toBe('Odpiranje dlani')
+    expect(c.rows.find((r) => r.key === 'fist_level')?.label).toBe('Stisk v pest')
+    expect(c.nBaseline).toBe(3)
+    // tracing features are untouched by the camera sessions
+    expect(featureComparison(all, 1).rows[0].key).toBe('mean_dev')
+    // the same key reads differently per exercise
+    expect(featureLabel('top_level', 'camera', 2)).toBe('Kot odmika roke (°)')
+    expect(featureLabel('top_level', 'camera', 3)).toBe('Višina zapestja nad ramo')
+    expect(featureLabel('n_reps', 'camera')).toBe('Ponovitve')
+    expect(featureLabel('quality_ok', 'camera')).toBe('Kakovost zajema')
+    expect(featureLabel('mean_dev')).toBe('Povprečen odmik od želene črte')
+  })
+  it('describes a camera session in words', () => {
+    const hand = cameraSessionFacts(camHand[7])
+    expect(hand.map((f) => f.label)).toEqual(['Odpiranje dlani', 'Stisk v pest', 'Ponovitve'])
+    expect(hand[0].value).toBe('66 % zdravega giba')
+    expect(hand[2].value).toBe('7, vse predvidene')
+    const arms = cameraSessionFacts(camArms[0])
+    expect(arms).toEqual([
+      { label: 'Odmik roke', value: '81 % zdravega giba' },
+      { label: 'Ponovitve', value: '4 (80 % predvidenih)' },
+      { label: 'Nagib trupa', value: 'odbitek 4 %' },
+      { label: 'Dvig rame', value: 'kot pri zdravem gibu' },
+    ])
+    const poor = cameraSessionFacts(camPoor)
+    expect(poor[0].label).toBe('Kakovost zajema')
+    expect(poor[0].value).toContain('ne šteje')
+    expect(poor[0].value).toContain('52 %')
+    // a seeded session with only a few features is topped up with the raw movement values, nothing twice
+    expect(cameraSessionFacts({ level: 1, qualityOk: true, features: { open_level: 1.4, fist_level: 0.8, n_reps: 6, part_reps: 0.86, fps: 20 } })).toEqual([
+      { label: 'Ponovitve', value: '6 (86 % predvidenih)' },
+      { label: 'Odpiranje dlani', value: '1,4' },
+      { label: 'Stisk v pest', value: '0,8' },
+    ])
+    expect(cameraSessionFacts({ level: 1, qualityOk: true, features: { open_level: 1.4 } })).toEqual([{ label: 'Odpiranje dlani', value: '1,4' }])
+  })
+})
+
+describe('alerts across measurements', () => {
+  const p = { daysToNextVisit: 30, nextVisitDate: iso(59), summary: { nSessions: 10, nCheckins: 4, lastSessionDay: iso(27), lastCheckinDay: iso(15), combinedDelta: -9, combinedDirection: 'declining' as const } }
+  const both: Alert = {
+    ...alert,
+    rule: 'both',
+    severity: 'red',
+    evidence: {
+      games: { trace: { delta: -14.6 }, camera: { delta: -11.2 } },
+      delta: -14.6,
+      triggers: [
+        { rule: 'trend_drop', severity: 'yellow', day: iso(25), game: 'trace', reason: 'Sledenje pod izhodiščem.' },
+        { rule: 'trend_drop', severity: 'yellow', day: iso(26), game: 'camera', reason: 'Kamera pod izhodiščem.' },
+        { rule: 'subjective_drop', severity: 'yellow', day: iso(27), reason: 'Slabše počutje.' },
+      ],
+    },
+  }
+  const cameraOnly: Alert = {
+    ...alert,
+    evidence: { games: { camera: { delta: -12.3 } }, delta: -12.3, triggers: [{ rule: 'trend_drop', severity: 'yellow', day: iso(27), game: 'camera', reason: 'x' }] },
+  }
+
+  it('reads evidence.games defensively, tracing first', () => {
+    expect(alertGames(both)).toEqual([
+      { game: 'trace', delta: -14.6 },
+      { game: 'camera', delta: -11.2 },
+    ])
+    expect(alertGames({ evidence: { games: { camera: { delta: 'x' }, motion: { delta: -3 } } } })).toEqual([])
+    expect(alertGames({ evidence: { games: [] } })).toEqual([])
+    expect(alertGames(alert)).toEqual([])
+    expect(alertTriggers(both).map((t) => t.game)).toEqual(['trace', 'camera', null])
+  })
+  it('names each dropping measurement, then the next visit', () => {
+    const f = alertFacts(both, p, iso(29))
+    expect(f).toEqual([
+      { label: 'Sledenje', value: '14,6 točke pod izhodiščem' },
+      { label: 'Vaje s kamero', value: '11,2 točke pod izhodiščem' },
+      { label: 'Naslednji pregled', value: 'čez 30 dni', detail: '10. 12. 2026' },
+    ])
+    expect(alertFacts(cameraOnly, p, iso(29)).map((x) => `${x.label}: ${x.value}`)).toEqual([
+      'Vaje s kamero: 12,3 točke pod izhodiščem',
+      'Naslednji pregled: čez 30 dni',
+    ])
+    // without evidence.games: today's behaviour, but a camera trigger is not called "Sledenje"
+    expect(alertFacts(alert, p, iso(29))[0]).toEqual({ label: 'Sledenje', value: '11,4 točke pod izhodiščem' })
+    const camNoGames = { ...cameraOnly, evidence: { delta: -12.3, triggers: cameraOnly.evidence.triggers } }
+    expect(alertFacts(camNoGames, p, iso(29))[0].label).toBe('Vaje s kamero')
+    // and combinedDelta (tracing) is never shown as the camera's change
+    expect(alertFacts({ ...camNoGames, evidence: { triggers: cameraOnly.evidence.triggers } }, p, iso(29))).toHaveLength(1)
+  })
+  it('opens the camera measurement only for a camera-only alert', () => {
+    expect(defaultMeasurement(cameraOnly, true)).toBe('camera')
+    expect(defaultMeasurement(both, true)).toBe('trace')
+    expect(defaultMeasurement(alert, true)).toBe('trace')
+    expect(defaultMeasurement(null, true)).toBe('trace')
+    expect(defaultMeasurement(cameraOnly, false)).toBe('trace')
+  })
+  it('names trend rules per game', () => {
+    expect(ruleLabel('trend_drop', 'trace')).toBe('Sledenje pod izhodiščem')
+    expect(ruleLabel('trend_drop', 'camera')).toBe('Vaje s kamero pod izhodiščem')
+    expect(ruleLabel('subjective_drop', null)).toBe('Slabše počutje ali več bolečine')
+    expect(ruleLabel('unknown', 'camera')).toBeUndefined()
+  })
+})
+
+describe('raw series with missing samples', () => {
+  it('skips null points', () => {
+    const strokes = splitStrokes({ x: [0, null, 0.2], y: [0, 0.5, 1], strokeId: [0, 0, 0] })
+    expect(strokes[0].points).toEqual([{ x: 0, y: 0 }, { x: 0.2, y: 1 }])
   })
 })

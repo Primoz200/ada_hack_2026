@@ -1,5 +1,5 @@
-// Moj napredek: one sentence, one recovery chart, the two ratings, this week, and whether the
-// doctor has looked. Nothing else.
+// Moj napredek: one sentence, one recovery chart per game, the two ratings, this week, and whether
+// the doctor has looked. Nothing else.
 import { ArrowRight, CalendarCheck, Stethoscope } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 import { paths } from '@/app/paths'
@@ -9,8 +9,8 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAsync } from '@/lib/useAsync'
 import { daysOf, longDate } from './format'
+import { ProgressCharts } from './GameCharts'
 import { RatingsChart } from './RatingsChart'
-import { RecoveryChart } from './RecoveryChart'
 import { BackHome, Column, FeedbackMark, Heading, LoadError, PanelSkeleton } from './ui'
 
 export function ProgressPage() {
@@ -34,7 +34,7 @@ export function ProgressPage() {
         <Panel>
           <PanelSkeleton lines={6} />
         </Panel>
-      ) : data.points.length === 0 ? (
+      ) : data.games.every((g) => g.points.length === 0) ? (
         <EmptyProgress progress={data} />
       ) : (
         <Dashboard progress={data} />
@@ -93,15 +93,7 @@ function Dashboard({ progress: p }: { progress: Progress }) {
             <FeedbackMark tone={p.tone} trend={p.trend} />
           </div>
         </div>
-        {p.points.length >= 2 ? (
-          <div className="mt-8 -ml-2">
-            <RecoveryChart points={p.points} personalBestDay={p.personalBestDay} height={300} />
-          </div>
-        ) : (
-          <p className="mt-8 rounded-xl bg-muted p-6 text-muted-foreground">
-            Graf se bo pokazal po naslednjih samopregledih.
-          </p>
-        )}
+        <ProgressCharts games={p.games} overallTrend={p.trend} />
         <div className="mt-8 space-y-5 border-t border-border pt-7">
           <Week done={p.weekDone} goal={p.weekGoal} />
           {p.clinicianReviewedAt ? <Reviewed at={p.clinicianReviewedAt} /> : null}

@@ -1,3 +1,6 @@
 .venv/
-data/
+data/*
+!data/camera/
+data/camera/*
+!data/camera/recordings/
 __pycache__/

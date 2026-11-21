@@ -7,10 +7,11 @@ import { Panel } from '@/components/app/Panel'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAsync } from '@/lib/useAsync'
+import { cn } from '@/lib/utils'
 import { firstName, relativeDay } from './format'
 import { StepPreview } from './StepPreview'
 import { Column, Heading, LoadError, PanelSkeleton, slateOutline } from './ui'
-import { buildWizard, isPartlyDone } from './wizard'
+import { isPartlyDone, previewItems } from './wizard'
 
 function greeting(now = new Date()): string {
   const h = now.getHours()
@@ -60,8 +61,8 @@ export function HomePage() {
 }
 
 function SelfcheckChoice({ home }: { home: PatientHome }) {
-  const wizard = buildWizard(home.steps).filter((s) => s.kind !== 'result')
-  const doneKeys = new Set(home.steps.filter((s) => s.done).map((s) => s.id))
+  const items = previewItems(home.steps)
+  const withCamera = home.steps.some((s) => s.gameType === 'camera')
   const resume = isPartlyDone(home.steps)
   return (
     <div className="space-y-6">
@@ -77,11 +78,16 @@ function SelfcheckChoice({ home }: { home: PatientHome }) {
         <p className="mt-2 max-w-[60ch] text-lg text-muted-foreground">
           {resume
             ? 'Del ste že opravili. Nadaljujete tam, kjer ste ostali.'
-            : 'Dve kratki oceni in nekaj nalog z roko. Vzame približno dve minuti.'}
+            : withCamera
+              ? 'Dve oceni, naloge z roko in vaje pred kamero. Vzame približno pet minut.'
+              : 'Dve kratki oceni in nekaj nalog z roko. Vzame približno dve minuti.'}
         </p>
-        <ol className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="Koraki samopregleda">
-          {wizard.map((s) => (
-            <StepPreview key={s.key} step={s} done={doneKeys.has(s.key)} />
+        <ol
+          className={cn('mt-8 grid grid-cols-2 gap-4', items.length === 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4')}
+          aria-label="Koraki samopregleda"
+        >
+          {items.map((item) => (
+            <StepPreview key={item.key} item={item} />
           ))}
         </ol>
         <div className="mt-8 border-t border-border pt-8">

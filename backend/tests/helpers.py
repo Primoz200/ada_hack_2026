@@ -34,6 +34,19 @@ def play(db, pid, day, score, level=1, completed=True, hour=9):
                                  preset_score=preset)
 
 
+CAMERA_META = ClientMeta(input_device="camera", canvasW=1280, canvasH=720, user_agent="t",
+                         videoW=1280, videoH=720, fpsMeasured=25.0)
+
+
+def play_camera(db, pid, day, score, level=1, quality_ok=True, completed=True, hour=11):
+    """One camera exercise through ingest_session (preset score, no recording)."""
+    data = SessionIn(patient_id=pid, game_type="camera", level=level, hand="right",
+                     started_at=clock.at(day, hour, level), duration_ms=21000, completed=completed,
+                     series={}, client_meta=CAMERA_META)
+    preset = ScoreResult({"n_reps": 7.0}, float(score), score_to_class(score), "camera-test", quality_ok=quality_ok)
+    return ingest.ingest_session(db, data, day=day, created_at=clock.at(day, hour, level), preset_score=preset)
+
+
 def play_round(db, pid, day, score):
     """All three levels on one day (level offsets keep each level's own baseline apart)."""
     return [play(db, pid, day, score + off, level=lv) for lv, off in ((1, 5), (2, 0), (3, -5))]

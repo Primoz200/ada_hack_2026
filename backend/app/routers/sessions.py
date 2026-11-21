@@ -3,15 +3,17 @@ from fastapi import APIRouter, HTTPException
 from app.deps import Db, require_patient
 from app.models import GameSession, SessionRaw
 from app.models.schemas import SessionIn, SessionRawOut, SessionResult
+from app.seed.pathways import CAMERA_GAME, TRACE_GAME
 from app.services import ingest
 
 router = APIRouter(prefix="/api", tags=["sessions"])
+LEVELS = {g["gameType"]: set(g["levels"]) for g in (TRACE_GAME, CAMERA_GAME)}
 
 
 @router.post("/sessions", response_model=SessionResult, operation_id="createSession")
 def create_session(data: SessionIn, db: Db):
     require_patient(db, data.patient_id)
-    if data.game_type == "trace" and data.level not in (1, 2, 3):
+    if data.level not in LEVELS[data.game_type]:
         raise HTTPException(422, "Neznana stopnja igre")
     row = ingest.ingest_session(db, data)
     return SessionResult(session_id=row.id, scored=row.score is not None)

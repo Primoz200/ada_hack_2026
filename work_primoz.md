@@ -57,6 +57,19 @@
 - `score_session` (povezava backend ↔ model) bo verjetno naredil Matevž; vse potrebno je v `features.py` (preprocess, extract_features), `common.py` (score_to_class) in `artifacts/` (tracer_gbm.joblib, tracer_cnn.pt). Venv: `~/venvs/ada_models`.
 - **Naslednji korak:** model za CV igro (MediaPipe: odpiranje dlani, abdukcija ramen, dvig rok).
 
+## 2026-11-21 — CV igra: snemalnik + točkovanje s pravili (branch `compvis`)
+
+- **Odločitev:** za kamero **ni modela ne sintetike**. Posnameva pravilne gibe (referenca), posnetek »pacienta« se oceni s pravili kot % reference (0–100, pragi 85/65/40). Točkovanje samo v backendu (Python), v brskalniku samo zajem + izris točk.
+- Vaje: 1 odpiranje/zapiranje dlani v ritmu piska 1 Hz (razpon odpiranja + časovna usklajenost s piski), 2 roke v stran, 3 dvig rok (razpon nad lastnim mirovanjem, št. ponovitev, kazen za nagib trupa in dvig rame).
+- `backend/models/camera/`: `server.py` (FastAPI, shrani posnetek + video, točkuje, gradi referenco), `recorder/` (vanilla JS + MediaPipe Tasks 1.2.3, lokalno iz `vendor/`), `exercises.py`, `signals.py`, `scoring.py` (`score_camera` – isti podpis kot `score_session`), `build_reference.py`, `plot_recording.py`, `README.md`.
+- Posnetki gredo v `backend/models/data/camera/recordings/` (gitignored); shranjeni so surovi landmarki + `.webm`, zato lahko značilke kasneje spremeniva brez ponovnega snemanja.
+- Za Matevža: predlagan `gameType "camera"` + `level` 1–3 (v planu sta še `camera_tapping`/`camera_reach`) – uskladiti.
+- **Naslednji korak:** posneti reference (≈3 na vajo in roko), nato nekaj namerno slabših posnetkov in nastaviti uteži.
+- **Točkovanje v0.2 (`camera-rules-0.2`)** na referencah (dlan 2× D + 1× L, roke v stran 2×, dvig 1×; časi: dlan pisk = odprta, 3 s cikel; roke 4 s gor / 4 s dol). Pozicija je glavno, čez referenco ni kazni, ritem se ne točkuje (samo število ponovitev). Dlan iz **3D world landmarkov** (2D je nagnjeno pest kazal kot napol odprto). Dlan: √(odpri × stisni); roke: vrh ponovitve med zdravim mirovanjem in vrhom, kazen za nagib trupa (do 20 %) in dvig rame (do 10 %).
+- `validate_scoring.py`: leave-one-out 96–100; degradirani zdravi posnetki → 40 % giba ≈ 60, 75 % ≈ 85; hitreje / izpad sličic / šum ne spremeni ocene. Graf `data/camera/plots/score_validation.jpg`.
+- **Naslednje:** preizkus na pravih »pacientih« prek Matevževe strani; po potrebi še posnetki dviga rok in leve dlani (referenca dviga ima n=1).
+- **v0.3 (strožje):** pri dlani je bil razpon preblag (delni gibi niso padli pod ~50). Dodan `ZERO_AT` – polovica zdravega giba dlani (četrtina pri rokah) = 0 točk, linearno do 100. Testni posnetki: delna pest 78 → 58, slabše odpiranje + zapiranje 83 → 68, brez giba 21 → 0; zdravi ostanejo 92–100.
+
 ## 2026-11-21 (pozno) — Turri: backend iz ***plain specifikacije (izziv Codeplain)
 
 - **Kaj:** celoten `backend/app` (brez `backend/models/`) zgrajen s turri iz specifikacije `turri/backend.plain` (16 funkcionalnih specifikacij, 8 datotek s scenariji za black-box teste, lastni skripti za teste v `turri/test_scripts/`). Modeli: OpenAI GPT na Amazon Bedrock (`gpt-6-astra` načrtuje, `gpt-6-luna` piše kodo). Ključ je zunaj repozitorija v `~/.config/turri/bedrock.env`, nalaga ga `turri/run.sh`.

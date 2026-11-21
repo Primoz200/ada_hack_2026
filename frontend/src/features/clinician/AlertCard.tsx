@@ -10,7 +10,20 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { RULE_LABEL, SEVERITY_LABEL, SEVERITY_STATUS, alertDivergence, alertFacts, alertTriggers, formatDateTime, formatDay, type Fact } from './model'
+import {
+  GAME_TITLE,
+  SEVERITY_LABEL,
+  SEVERITY_STATUS,
+  alertDivergence,
+  alertFacts,
+  alertGameSet,
+  alertTriggers,
+  formatDateTime,
+  formatDay,
+  ruleLabel,
+  type Fact,
+  type Trigger,
+} from './model'
 import { DivergenceNote, StatusBadge, outlineButton } from './ui'
 
 interface Props {
@@ -34,7 +47,16 @@ export function AlertCard({ alert, patient, today, meta, onChanged }: Props) {
   const tone = TONE[alert.severity] ?? TONE.grey
   const facts = alertFacts(alert, patient, today)
   const triggers = alertTriggers(alert)
-  const divergence = alertDivergence(alert) ?? (alert.diverging ? 'Rezultati sledenja in pacientovo poročanje se razhajata.' : null)
+  const games = alertGameSet(alert)
+  const divergenceFallback =
+    games.length > 1
+      ? 'Meritve in pacientovo poročanje se razhajajo.'
+      : games[0] === 'camera'
+        ? 'Vaje s kamero in pacientovo poročanje se razhajajo.'
+        : 'Rezultati sledenja in pacientovo poročanje se razhajata.'
+  const divergence = alertDivergence(alert) ?? (alert.diverging ? divergenceFallback : null)
+  // two measurement facts + the visit share one compact row
+  const factCols = facts.length >= 3 ? 'sm:grid-cols-[repeat(3,minmax(0,max-content))] gap-x-10' : 'sm:grid-cols-[repeat(2,minmax(0,max-content))] gap-x-12'
   const clinicianId = meta?.clinicians[0]?.id
   const clinicianName = (id: string | null | undefined) => meta?.clinicians.find((c) => c.id === id)?.name ?? id ?? ''
 
@@ -104,7 +126,7 @@ export function AlertCard({ alert, patient, today, meta, onChanged }: Props) {
       </div>
 
       {facts.length > 0 && (
-        <dl className={cn('mt-7 grid gap-x-12 gap-y-4 border-t pt-6 sm:grid-cols-[repeat(2,minmax(0,max-content))]', tone.rule)} data-testid="alert-facts">
+        <dl className={cn('mt-7 grid gap-y-4 border-t pt-6', factCols, tone.rule)} data-testid="alert-facts">
           {facts.map((f) => (
             <FactItem key={f.label} fact={f} muted={tone.muted} />
           ))}
@@ -125,12 +147,15 @@ export function AlertCard({ alert, patient, today, meta, onChanged }: Props) {
               ({triggers.length} {triggers.length === 1 ? 'sprožilec' : triggers.length === 2 ? 'sprožilca' : triggers.length < 5 ? 'sprožilci' : 'sprožilcev'})
             </span>
           </summary>
-          <ul className="mt-3 max-w-[72ch] space-y-2.5 text-[0.9375rem]" data-testid="alert-triggers">
+          <ul className="mt-3 max-w-[84ch] space-y-2.5 text-[0.9375rem]" data-testid="alert-triggers">
             {triggers.map((t, i) => (
-              <li key={i} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3">
+              <li key={i} className="grid grid-cols-[6.5rem_8.5rem_minmax(0,1fr)] gap-3">
                 <span className={cn('tabular font-medium', tone.muted)}>{t.day ? formatDay(t.day) : '–'}</span>
+                <span className={cn('font-medium', tone.muted)} data-testid="trigger-measurement">
+                  {triggerMeasurement(t)}
+                </span>
                 <span>
-                  <span className="font-semibold">{RULE_LABEL[t.rule] ?? SEVERITY_LABEL[t.severity] ?? 'Sprožilec'}.</span> {t.reason}
+                  <span className="font-semibold">{ruleLabel(t.rule, t.game) ?? SEVERITY_LABEL[t.severity] ?? 'Sprožilec'}.</span> {t.reason}
                 </span>
               </li>
             ))}
@@ -149,6 +174,16 @@ export function AlertCard({ alert, patient, today, meta, onChanged }: Props) {
       />
     </Panel>
   )
+}
+
+/** What a trigger is about: a measurement, the ratings, or missing self-checks. */
+function triggerMeasurement(t: Trigger): string {
+  if (t.game) return GAME_TITLE[t.game]
+  if (t.rule === 'subjective_drop') return 'Počutje, bolečina'
+  if (t.rule === 'no_data') return 'Samopregled'
+  // older evidence without `game`: the trend rules were about tracing
+  if (t.rule === 'trend_drop' || t.rule === 'big_drop' || t.rule === 'both') return GAME_TITLE.trace
+  return '–'
 }
 
 function FactItem({ fact, muted }: { fact: Fact; muted: string }) {

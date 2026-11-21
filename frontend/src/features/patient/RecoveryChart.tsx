@@ -45,12 +45,12 @@ function WordTick({ x = 0, y = 0, payload }: TickProps) {
 
 interface TipProps {
   active?: boolean
-  payload?: { payload?: { day: string; label: keyof typeof LEVEL_WORDS } }[]
+  payload?: { payload?: { day: string; label?: keyof typeof LEVEL_WORDS } }[]
 }
 
 function Tip({ active, payload }: TipProps) {
   const p = payload?.[0]?.payload
-  if (!active || !p) return null
+  if (!active || !p || !p.label) return null
   return (
     <div className="rounded-lg bg-card px-3 py-2 text-[0.95rem] shadow-panel ring-1 ring-border">
       <div className="font-semibold">{longDate(parseDay(p.day))}</div>
@@ -64,16 +64,22 @@ export function RecoveryChart({
   personalBestDay,
   height = 280,
   label = 'Graf vaših rezultatov skozi čas',
+  days,
 }: {
   points: readonly ProgressPoint[]
   personalBestDay?: string | null
   height?: number
   label?: string
+  /** a shared x axis (sorted days), so charts of several games line up; days without a point stay empty */
+  days?: readonly string[]
 }) {
-  const data = points.map((p) => ({ day: p.day, value: p.value, label: p.label }))
+  const own = points.map((p) => ({ day: p.day, value: p.value, label: p.label }))
+  const byDay = new Map(own.map((p) => [p.day, p]))
+  type Row = { day: string; value: number | null; label?: ProgressPoint['label'] }
+  const data: Row[] = days ? days.map((day) => byDay.get(day) ?? { day, value: null }) : own
   const extent = Math.max(6, ...points.map((p) => Math.abs(p.value)))
-  const best = personalBestDay ? data.find((p) => p.day === personalBestDay) : undefined
-  const last = data[data.length - 1]
+  const best = personalBestDay ? own.find((p) => p.day === personalBestDay) : undefined
+  const last = own[own.length - 1]
   const showDots = data.length <= 21
   return (
     <div role="img" aria-label={label} className="select-none">

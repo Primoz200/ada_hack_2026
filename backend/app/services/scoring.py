@@ -1,10 +1,16 @@
 """Scoring adapter (plan section 5).
 
-score_session() is the only entry point the platform calls. It tries Primož's model
-first and falls back to the stand-in scorer, so the platform never waits on the model.
-Primož's code is consumed read-only; it still uses the old format (0-1000 units,
-level ids line/circle/maze), so the adapter converts: level 1/2/3 <-> line/circle/maze,
-coordinates x1000.
+score_session() is the only entry point the platform calls, for both games:
+
+* trace: Primož's tracer model first, falling back to the stand-in scorer, so the platform
+  never waits on the model. His tracer code still uses the old format (0-1000 units, level
+  ids line/circle/maze), so the adapter converts: level 1/2/3 <-> line/circle/maze, x1000.
+* camera: Primož's rule-based camera scorer (app.services.camera_model). There is no
+  stand-in: a recording that cannot be scored (poor capture quality, no reference, the
+  scorer raised) comes back with score None and is stored without a score, outside the
+  trend.
+
+current_model_version() reports the tracer scorer.
 """
 import importlib
 import logging
@@ -118,8 +124,63 @@ def _standin_trace(duration_ms: int, series: dict[str, list[float]]) -> ScoreRes
     return ScoreResult(features, score, score_to_class(score), STANDIN_VERSION)
 
 
+_camera: dict[str, Any] = {"mod": None, "tried": False}
+CAMERA_UNAVAILABLE_VERSION = "camera-unavailable"
+
+
+def _camera_model():
+    """app.services.camera_model, imported lazily: a broken camera scorer must not take the
+    platform (or tracing) down with it."""
+    if not _camera["tried"]:
+        _camera["tried"] = True
+        try:
+            _camera["mod"] = importlib.import_module("app.services.camera_model")
+        except Exception as e:  # missing scipy, a broken module ...
+            log.warning("camera scorer unavailable (%s)", e)
+    return _camera["mod"]
+
+
+def camera_duration_s(level: int) -> Optional[float]:
+    """Fixed length of a camera exercise (Primož's exercises.py), None if unknown."""
+    mod = _camera_model()
+    ex = mod.EXERCISES.get(level) if mod is not None else None
+    return float(ex["duration_s"]) if ex and ex.get("duration_s") is not None else None
+
+
+def _finite(v: Any) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def score_camera(level: int, hand: str, duration_ms: int, series: dict[str, list],
+                 client_meta: dict) -> ScoreResult:
+    """Camera exercise -> ScoreResult. score None (so: no trend) when the capture quality is
+    poor, there is no reference, or scoring raised; whatever features were found are kept."""
+    mod = _camera_model()
+    if mod is None:
+        return ScoreResult({}, None, None, CAMERA_UNAVAILABLE_VERSION)
+    version = str(getattr(mod, "MODEL_VERSION", "camera"))
+    try:
+        out = mod.score_session("camera", level, hand, duration_ms, series, client_meta)
+    except Exception as e:  # never fail a submission because of scoring
+        log.warning("camera scoring failed (%s); stored without a score", e)
+        return ScoreResult({}, None, None, version)
+    features = {str(k): float(v) for k, v in dict(out.get("features") or {}).items() if _finite(v)}
+    quality_ok = bool(out.get("quality_ok"))
+    version = str(out.get("model_version") or version)
+    score = out.get("score")
+    if not quality_ok or not _finite(score):
+        return ScoreResult(features, None, None, version, quality_ok=quality_ok)
+    score = round(max(0.0, min(100.0, float(score))), 1)
+    cls = out.get("impairment_class")
+    if cls not in ("normal", "mild", "moderate", "severe"):
+        cls = score_to_class(score)
+    return ScoreResult(features, score, cls, version, quality_ok=True)
+
+
 def score_session(game_type: str, level: int, hand: str, duration_ms: int,
-                  series: dict[str, list[float]], client_meta: dict) -> ScoreResult:
+                  series: dict[str, list], client_meta: dict) -> ScoreResult:
+    if game_type == "camera":
+        return score_camera(level, hand, duration_ms, series, client_meta)
     if game_type == "trace":
         fn = _load_hook()
         if fn is not None and level in LEVEL_IDS:
@@ -130,5 +191,9 @@ def score_session(game_type: str, level: int, hand: str, duration_ms: int,
             except Exception as e:  # any failure: the platform must never wait on the model
                 _hook["failed"] = True
                 log.warning("tracer model failed (%s); falling back to stand-in", e)
-        return _standin_trace(duration_ms, series)
-    return ScoreResult({}, 50.0, "moderate", STANDIN_VERSION)
+        try:
+            return _standin_trace(duration_ms, series)
+        except Exception as e:  # e.g. null coordinates: stored, not scored
+            log.warning("stand-in scorer failed (%s); stored without a score", e)
+            return ScoreResult({}, None, None, STANDIN_VERSION)
+    return ScoreResult({}, None, None, STANDIN_VERSION)

@@ -213,6 +213,86 @@
         "title": "AlertOut",
         "type": "object"
       },
+      "CameraExercise": {
+        "description": "Cue timeline of one camera exercise (single source of truth: backend/models/camera/exercises.py).\nCues are at first_cue_s + k * cue_period_s, k = 0..n_cues-1; the time before the first cue is the\nrest pose. hand: cue = hand fully open. arms: cue = \"up\", held for up_s, then \"down\".",
+        "properties": {
+          "cuePeriodS": {
+            "title": "Cueperiods",
+            "type": "number"
+          },
+          "detector": {
+            "enum": [
+              "hand",
+              "pose"
+            ],
+            "title": "Detector",
+            "type": "string"
+          },
+          "durationS": {
+            "title": "Durations",
+            "type": "number"
+          },
+          "firstCueS": {
+            "title": "Firstcues",
+            "type": "number"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "nCues": {
+            "title": "Ncues",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "openWindowS": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openwindows"
+          },
+          "upS": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ups"
+          }
+        },
+        "required": [
+          "level",
+          "key",
+          "name",
+          "detector",
+          "durationS",
+          "firstCueS",
+          "cuePeriodS",
+          "nCues",
+          "instructions"
+        ],
+        "title": "CameraExercise",
+        "type": "object"
+      },
       "CheckinIn": {
         "description": "The two ratings at the start of a self-check.",
         "properties": {
@@ -292,6 +372,7 @@
         "type": "object"
       },
       "ClientMeta": {
+        "additionalProperties": true,
         "properties": {
           "canvasH": {
             "title": "Canvash",
@@ -350,6 +431,61 @@
           "role"
         ],
         "title": "ClinicianOut",
+        "type": "object"
+      },
+      "GameProgress": {
+        "description": "One game's own trend for the patient. Tracing and camera exercises are shown separately.",
+        "properties": {
+          "gameType": {
+            "enum": [
+              "trace",
+              "camera"
+            ],
+            "title": "Gametype",
+            "type": "string"
+          },
+          "personalBestDay": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personalbestday"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/ProgressPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trend": {
+            "enum": [
+              "improving",
+              "stable",
+              "declining",
+              "unknown"
+            ],
+            "title": "Trend",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gameType",
+          "title",
+          "trend",
+          "points",
+          "personalBestDay"
+        ],
+        "title": "GameProgress",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -415,9 +551,7 @@
           "gameType": {
             "enum": [
               "trace",
-              "camera_tapping",
-              "camera_reach",
-              "motion"
+              "camera"
             ],
             "title": "Gametype",
             "type": "string"
@@ -427,6 +561,14 @@
               "type": "integer"
             },
             "title": "Levels",
+            "type": "array"
+          },
+          "optionalLevels": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Optionallevels",
             "type": "array"
           },
           "title": {
@@ -666,6 +808,13 @@
       },
       "PatientListItem": {
         "properties": {
+          "cameraSparkline": {
+            "items": {
+              "$ref": "#/components/schemas/SparkPoint"
+            },
+            "title": "Camerasparkline",
+            "type": "array"
+          },
           "daysSinceDischarge": {
             "title": "Dayssincedischarge",
             "type": "integer"
@@ -765,6 +914,7 @@
           "reason",
           "diverging",
           "gameSparkline",
+          "cameraSparkline",
           "wellbeingSparkline",
           "daysToNextVisit",
           "openAlertId",
@@ -880,28 +1030,16 @@
             ],
             "title": "Clinicianreviewedat"
           },
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/GameProgress"
+            },
+            "title": "Games",
+            "type": "array"
+          },
           "patientId": {
             "title": "Patientid",
             "type": "string"
-          },
-          "personalBestDay": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Personalbestday"
-          },
-          "points": {
-            "items": {
-              "$ref": "#/components/schemas/ProgressPoint"
-            },
-            "title": "Points",
-            "type": "array"
           },
           "ratings": {
             "items": {
@@ -953,9 +1091,8 @@
           "title",
           "text",
           "patientId",
-          "points",
+          "games",
           "ratings",
-          "personalBestDay",
           "weekDone",
           "weekGoal",
           "clinicianReviewedAt"
@@ -1121,14 +1258,23 @@
             "title": "Done",
             "type": "boolean"
           },
+          "durationS": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Durations"
+          },
           "gameType": {
             "anyOf": [
               {
                 "enum": [
                   "trace",
-                  "camera_tapping",
-                  "camera_reach",
-                  "motion"
+                  "camera"
                 ],
                 "type": "string"
               },
@@ -1161,6 +1307,11 @@
             ],
             "title": "Level"
           },
+          "skippable": {
+            "default": false,
+            "title": "Skippable",
+            "type": "boolean"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1183,6 +1334,13 @@
             "title": "Day",
             "type": "string"
           },
+          "games": {
+            "items": {
+              "$ref": "#/components/schemas/GameProgress"
+            },
+            "title": "Games",
+            "type": "array"
+          },
           "levelsDone": {
             "title": "Levelsdone",
             "type": "integer"
@@ -1194,13 +1352,6 @@
           "patientId": {
             "title": "Patientid",
             "type": "string"
-          },
-          "points": {
-            "items": {
-              "$ref": "#/components/schemas/ProgressPoint"
-            },
-            "title": "Points",
-            "type": "array"
           },
           "text": {
             "title": "Text",
@@ -1240,7 +1391,7 @@
           "day",
           "levelsDone",
           "levelsTotal",
-          "points"
+          "games"
         ],
         "title": "SelfcheckSummary",
         "type": "object"
@@ -1274,9 +1425,7 @@
           "gameType": {
             "enum": [
               "trace",
-              "camera_tapping",
-              "camera_reach",
-              "motion"
+              "camera"
             ],
             "title": "Gametype",
             "type": "string"
@@ -1300,7 +1449,14 @@
           "series": {
             "additionalProperties": {
               "items": {
-                "type": "number"
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "type": "array"
             },
@@ -1342,9 +1498,7 @@
           "gameType": {
             "enum": [
               "trace",
-              "camera_tapping",
-              "camera_reach",
-              "motion"
+              "camera"
             ],
             "title": "Gametype",
             "type": "string"
@@ -1371,7 +1525,14 @@
           "series": {
             "additionalProperties": {
               "items": {
-                "type": "number"
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "type": "array"
             },
@@ -1455,9 +1616,7 @@
           "gameType": {
             "enum": [
               "trace",
-              "camera_tapping",
-              "camera_reach",
-              "motion"
+              "camera"
             ],
             "title": "Gametype",
             "type": "string"
@@ -1515,6 +1674,17 @@
             ],
             "title": "Modelversion"
           },
+          "qualityOk": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualityok"
+          },
           "score": {
             "anyOf": [
               {
@@ -1546,7 +1716,8 @@
           "impairmentClass",
           "modelVersion",
           "features",
-          "countsForTrend"
+          "countsForTrend",
+          "qualityOk"
         ],
         "title": "SessionSummary",
         "type": "object"
@@ -1929,6 +2100,31 @@
         "summary": "Ack Alert",
         "tags": [
           "alerts"
+        ]
+      }
+    },
+    "/api/camera/exercises": {
+      "get": {
+        "operationId": "listCameraExercises",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraExercise"
+                  },
+                  "title": "Response Listcameraexercises",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Exercises",
+        "tags": [
+          "camera"
         ]
       }
     },

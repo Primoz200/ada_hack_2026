@@ -119,3 +119,44 @@
 - Prag za demo: opozorilo se sproži pri povprečni oceni pod približno 67; zato je bila Ivanova raven dvignjena.
 
 **Odprto:** igra z računalniškim vidom (mesto v čarovniku in pri zdravniku je pripravljeno); pravi telefon ni preverjen; `IMPLEMENTATION_PLAN.md` ima poglavje v8 na vrhu, starejša poglavja niso prepisana.
+
+## 2026-11-21 — Vaje s kamero v backendu (agent, worktree)
+
+- `scoring.py`: `gameType "camera"` gre na Primožev točkovalnik (`camera_model`); slaba kakovost posnetka, brez ocene ali napaka → seja shranjena (surovi podatki, značilke), brez ocene, ne šteje v trend. `ScoreResult.quality_ok` → `GameSession.quality_ok`; dodatni ključi `clientMeta` (videoW, fpsMeasured …) pridejo do točkovalnika in v `SessionRaw`.
+- Trend: `camera:1..3`, `camera:all` po istih pravilih kot sledenje, nikoli mešano.
+- Opozorila: `trend_drop` / `big_drop` za vsako igro posebej (sprožilec ima `game`), `both` = padec katerekoli igre + počutje; zatiranje po pravilu IN igri; razlog poimenuje meritev; `evidence.games`.
+- Pacient: ton = povprečje razlik po igrah, odigranih na opisani dan (dan samo s sledenjem = kot prej); trend »slabše«, če pada katerakoli igra. `games` v `/progress` in `/selfcheck/summary`, 7 korakov v `/home`, kamera nikoli ne blokira zaključka.
+- Seed: kamera pri p1–p7, p9 (p3 ≈ −4 brez opozorila, p4 pada tudi kamera, p2 ima zaprto preteklo rumeno opozorilo samo zaradi kamere – »težava s podatki«); p8 in demo brez kamere. Ponastavitev ~3,9 s (prej ~2,2 s).
+- Testi: 131 (nov `tests/test_camera.py` s Primoževimi posnetki prek API-ja).
+
+## 2026-11-21 (23.50) — Vaje s kamero v samopregledu (branch `matevz/camera`)
+
+**Odločitve (Matevž):** v samopregled gredo vse tri Primoževe vaje s kamero; dlan je prva, roke v stran in dvig rok lahko pacient preskoči; brez kamere ali dovoljenja se vaje preskočijo; kamera vpliva na opozorila, sledenje in kamera imata ločena trenda in ločen prikaz.
+**Način dela:** veja iz `main` + združen `compvis`; Fable pogodba in most, trije agenti Opus (high): backend, igra in pacient, zdravnik.
+
+**Narejeno:**
+- Pogodba: `gameType "camera"`, `null` v vrstah, dodatna polja `clientMeta`, preskočljivi koraki, napredek po igrah, `cameraSparkline`, `GET /api/camera/exercises`.
+- `backend/app/services/camera_model.py`: most do Primoževega `score_camera` (njegova koda nespremenjena).
+- Igra `frontend/src/games/camera/` (prenos Primoževega snemalnika v React, MediaPipe Hands / Pose iz lastnega izvora, `scripts/setup_mediapipe.sh`).
+- Zdravnik: tretja krivulja, preklop Sledenje / Vaje s kamero, okvir opozorila z obema meritvama.
+
+**Preverjeno v brskalniku s pravim backendom (headless Chrome):**
+- Cel samopregled pri Ivanu: površno sledenje (50 / 51 / 52), vaja z dlanjo iz Primoževega testnega videa namesto kamere (`?cameraVideo=`) → ocena 57,2 (Primož 57,7), preskok obeh vaj z rokami → rezultat z dvema grafoma, pri zdravniku »Za pregled« zaradi sledenja.
+- Dovoljenje za kamero zavrnjeno → pojasnilo, vse vaje s kamero izpuščene, samopregled zaključen; skrbno sledenje brez opozorila.
+- Zdravnik s pravimi podatki: tri krivulje, pacientka z obema meritvama v padcu.
+- Testi: 133 backend, 76 frontend, pogodba brez odstopanj.
+
+**Ključno naučeno:**
+- Zamenljiv vir videa (`?cameraVideo=`, samo v razvojnem načinu) omogoča preverjanje igre s kamero brez kamere: isti cevovod, ocena se ujema s Primoževo na pol točke.
+- Headless Chrome z `--use-fake-ui-for-media-stream` na tem računalniku vklopi PRAVO kamero. Za pot brez kamere uporabi `--deny-permission-prompts`.
+- Najina shema je tiho zavrgla dodatna polja `clientMeta` (`fpsMeasured`, `videoW`), ki jih točkovanje bere; zdaj jih ohrani.
+
+**Ni preverjeno:** prava kamera v živo (piski, hitrost zajema, osvetlitev), telefon. **Odprto:** videi posnetkov (115 MB) so v veji; referenca za vaji z rokami je samo za desno stran.
+
+## 2026-11-22 (00.45) — Animacije izvedbe pri vajah s kamero (ločena veja `matevz/camera-animations`)
+
+**Odločitve (Matevž):** na uvodu vsake vaje s kamero animacija, ki se ponavlja do začetka vaje; lasten dizajn v slogu piktograma »stickman«, temno siv, brez Primoževih podatkov; delo na ločeni veji, da se lahko zavrže.
+**Narejeno (agent Opus, high):** `frontend/src/games/camera/demo/` — `model.ts` (figura iz kotov sklepov, potek zanke, katera beseda je poudarjena, zrcaljenje; testi) in `ExerciseDemo.tsx` (čisti SVG, brez novih odvisnosti). Tri animacije: velika dlan pest ↔ razprti prsti (zrcalna za levo roko), figura z rokama v stran do malo nad višino ramen (z lokom poti), figura z rokama naprej in nad glavo. Bleda sled skrajne lege kaže zdrav razpon; poudarjena beseda (»Odprite« / »Gor«) sledi fazi; pri `prefers-reduced-motion` dve mirujoči legi.
+**Preverjeno:** tsc, 94 frontend testov, build; posnetki zaslona v več fazah pri 1440×900 in 390×844 v pravem čarovniku, brez vklopa kamere. Gibanja v živo nisem gledal, samo posamezne faze.
+**Znana šibkost:** pri »Dvig rok« so vmesne faze (roki kažeta proti kameri) na mirujoči sliki dvoumne; možna zamenjava je pogled s strani.
+**Kako zavreči:** `git switch matevz/camera`; veja `matevz/camera` animacij nima.

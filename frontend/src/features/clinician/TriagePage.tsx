@@ -14,10 +14,10 @@ import { GAME_SPARK_DOMAIN, RATING_DOMAIN, defaultTab, filterPatients, plural, t
 import { Sparkline } from './Sparkline'
 import { EmptyState, ErrorState, StatusBadge, UnderlineTabs } from './ui'
 
-// status | name | trendlines (one column each; a third, for the computer-vision games, fits later) | arrow
+// status | name | trendlines (tracing, wellbeing, camera; one fixed-width slot each) | arrow
 // on a phone: status, name and trendlines stack in one column, the arrow stays top right
 const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-x-8 gap-y-2 md:grid-cols-[10.5rem_minmax(0,1fr)_auto_2rem]'
-const TREND_W = 220
+const TREND_W = 200
 
 const TABS: { id: TriageTab; label: string }[] = [
   { id: 'attention', label: 'Zahteva pozornost' },
@@ -123,6 +123,21 @@ function PatientRow({ p, today }: { p: PatientListItem; today: string }) {
             domain={RATING_DOMAIN}
             width={TREND_W}
           />
+          {/* camera exercises: same fixed scale as tracing; a patient without them simply has nothing here */}
+          {p.cameraSparkline.length > 0 ? (
+            <Sparkline
+              caption="Kamera"
+              description={`${p.name}: vaje s kamero zadnjih 21 dni glede na lastno izhodišče`}
+              points={p.cameraSparkline}
+              today={today}
+              domain={GAME_SPARK_DOMAIN}
+              reference={0}
+              emptyText="še ni izhodišča"
+              width={TREND_W}
+            />
+          ) : (
+            <div className="hidden md:block" style={{ width: TREND_W }} aria-hidden />
+          )}
         </div>
         <ArrowRight
           className="col-start-2 row-start-1 size-5 justify-self-end text-primary transition-transform group-hover:translate-x-0.5 md:col-start-auto md:row-start-auto"
@@ -156,6 +171,7 @@ function ListSkeleton() {
               <Skeleton className="h-8 w-28" />
               <Skeleton className="h-6 w-48" />
               <div className="flex gap-8">
+                <Skeleton className="h-11" style={{ width: TREND_W }} />
                 <Skeleton className="h-11" style={{ width: TREND_W }} />
                 <Skeleton className="h-11" style={{ width: TREND_W }} />
               </div>

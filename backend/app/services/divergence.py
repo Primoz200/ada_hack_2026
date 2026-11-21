@@ -55,14 +55,29 @@ def latest_combined_delta(db: Session, patient_id: str, day: date, game_type: st
     return snap.delta if snap else None
 
 
+GAMES = ("trace", "camera")  # same order as app.services.trend.GAMES (no import: hot file)
+# "sledenja" when only tracing is concerned, otherwise the measurements in general
+_DROP = {"trace": "Rezultati sledenja padajo, pacient pa poroča enako ali boljše počutje.",
+         "any": "Rezultati meritev padajo, pacient pa poroča enako ali boljše počutje."}
+_STABLE = {"trace": "Rezultati sledenja so stabilni, pacient pa poroča slabše počutje.",
+           "any": "Rezultati meritev so stabilni, pacient pa poroča slabše počutje."}
+
+
 def assess(db: Session, patient_id: str, day: date) -> tuple[bool, Optional[str]]:
-    """(diverging, sentence in Slovenian or None)."""
-    delta = latest_combined_delta(db, patient_id, day)
+    """(diverging, sentence in Slovenian or None).
+
+    Objective side, over the games that have a combined trend (tracing, camera exercises):
+    worse = ANY game at least OBJECTIVE_DROP below its baseline; stable = ALL of them within
+    OBJECTIVE_OK. A patient without camera data is judged on tracing alone.
+    """
+    deltas = {g: latest_combined_delta(db, patient_id, day, g) for g in GAMES}
+    deltas = {g: v for g, v in deltas.items() if v is not None}
     change = subjective_change(db, patient_id, day)
-    if delta is None or change is None:
+    if not deltas or change is None:
         return False, None
-    if delta <= -OBJECTIVE_DROP and change >= SUBJECTIVE_SAME:
-        return True, "Rezultati sledenja padajo, pacient pa poroča enako ali boljše počutje."
-    if abs(delta) < OBJECTIVE_OK and change <= SUBJECTIVE_WORSE:
-        return True, "Rezultati sledenja so stabilni, pacient pa poroča slabše počutje."
+    dropping = [g for g, v in deltas.items() if v <= -OBJECTIVE_DROP]
+    if dropping and change >= SUBJECTIVE_SAME:
+        return True, _DROP["trace" if dropping == ["trace"] else "any"]
+    if all(abs(v) < OBJECTIVE_OK for v in deltas.values()) and change <= SUBJECTIVE_WORSE:
+        return True, _STABLE["trace" if list(deltas) == ["trace"] else "any"]
     return False, None

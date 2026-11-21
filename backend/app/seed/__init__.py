@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 from app import db as dbmod
 from app.models import Patient
 from app.models.schemas import CheckinIn, ClientMeta, SessionIn
+from app.seed import camera
 from app.seed import stories as st
 from app.seed.pathways import fresh_clinicians, fresh_pathways
 from app.seed.traces import level_features, synthetic_trace  # noqa: F401  (public: synthetic_trace)
@@ -71,6 +72,21 @@ def write_day(db: Session, story: st.Story, k: int, day: date) -> tuple[int, int
                       client_meta=meta),
             day=day, created_at=when,
             preset_score=ScoreResult(_stored_features(feats), score, score_to_class(score), STANDIN_VERSION))
+        n_sessions += 1
+    for level, score in plan.camera_scores.items():
+        rng = st.rng_for(story.id, k, f"camfeat{level}")
+        feats = camera.features(level, score, rng)
+        when = clock.at(day, hour, 20 + 4 * level)
+        cam_meta = ClientMeta(input_device="camera", canvasW=1280, canvasH=720, device_pixel_ratio=1,
+                              user_agent="seed (camera)", videoW=1280, videoH=720, fpsMeasured=feats["fps"])
+        ingest.ingest_session(
+            db,
+            # no recording behind a seeded camera session: an empty series, no fake landmarks
+            SessionIn(patient_id=story.id, game_type="camera", level=level, hand=story.side,
+                      started_at=when, duration_ms=camera.DURATION_MS[level], completed=True, series={},
+                      client_meta=cam_meta),
+            day=day, created_at=when,
+            preset_score=ScoreResult(feats, score, score_to_class(score), camera.SEED_VERSION, quality_ok=True))
         n_sessions += 1
     return 1, n_sessions
 

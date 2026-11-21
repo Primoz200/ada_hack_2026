@@ -7,10 +7,12 @@ warning signs: the patient is never prompted to call anyone.
 from app.models import Clinician, Pathway
 
 TRACE_GAME = {"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3]}
-# Computer-vision game (Primož, in progress). Add it to a pathway's `games` when it is ready:
-# VISION_GAME = {"gameType": "camera_tapping", "title": "Gibanje roke", "levels": [1]}
+# Camera exercises (Primož, backend/models/camera): hand first, the two arm exercises may be skipped.
+CAMERA_GAME = {"gameType": "camera", "title": "Vaje s kamero", "levels": [1, 2, 3], "optionalLevels": [2, 3]}
 
-LEVEL_TITLES = {("trace", 1): "Ravna črta", ("trace", 2): "Krog", ("trace", 3): "Labirint"}
+LEVEL_TITLES = {("trace", 1): "Ravna črta", ("trace", 2): "Krog", ("trace", 3): "Labirint",
+                ("camera", 1): "Dlan", ("camera", 2): "Roke v stran", ("camera", 3): "Dvig rok"}
+GAME_TITLES = {"trace": "Sledenje", "camera": "Vaje s kamero"}  # patient- and clinician-facing
 
 RATINGS = [
     {"id": "wellbeing", "kind": "scale", "text": "Kako se počutite danes?", "shortLabel": "Počutje",
@@ -20,9 +22,9 @@ RATINGS = [
 ]
 
 PATHWAYS = [
-    Pathway(code="stroke", name="Možganska kap", frequency="vsak dan", games=[TRACE_GAME], questions=RATINGS),
-    Pathway(code="ctr", name="Operacija karpalnega kanala", frequency="vsak dan", games=[TRACE_GAME],
-            questions=RATINGS),
+    Pathway(code="stroke", name="Možganska kap", frequency="vsak dan", games=[TRACE_GAME, CAMERA_GAME], questions=RATINGS),
+    Pathway(code="ctr", name="Operacija karpalnega kanala", frequency="vsak dan",
+            games=[TRACE_GAME, CAMERA_GAME], questions=RATINGS),
 ]
 
 CLINICIANS = [Clinician(id="c1", name="dr. Ana Novak", role="zdravnica")]

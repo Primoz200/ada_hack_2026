@@ -44,13 +44,14 @@ def mk_checkin(pid, back, wellbeing=7, pain=2):
         s.commit()
 
 
-def mk_session(pid, back, level=1, completed=True, counts=True):  # noqa: D103
+def mk_session(pid, back, level=1, completed=True, counts=True, game="trace"):  # noqa: D103
     d = clock.today() - timedelta(days=back)
     with _s() as s:
-        s.add(GameSession(patient_id=pid, game_type="trace", level=level, hand="right",
+        s.add(GameSession(patient_id=pid, game_type=game, level=level, hand="right",
                           started_at=clock.at(d, 9), day=d, duration_ms=9000, completed=completed,
-                          input_device="touch", score=70.0 if completed else None,
-                          counts_for_trend=counts))
+                          input_device="camera" if game == "camera" else "touch",
+                          score=70.0 if completed else None, counts_for_trend=counts,
+                          quality_ok=(completed and counts) if game == "camera" else None))
         s.commit()
 
 
@@ -179,6 +180,13 @@ def test_sparklines(api):
     assert [p["value"] for p in r["gameSparkline"]] == [float(b) for b in range(21, 0, -1)]
     assert [p["day"] for p in r["gameSparkline"]] == sorted(p["day"] for p in r["gameSparkline"])
     assert [p["value"] for p in r["wellbeingSparkline"]] == [1.0, 3.0, 4.0, 7.0, 9.0, 10.0]
+    assert r["cameraSparkline"] == []  # no camera snapshots
+    for b in range(25, 0, -1):
+        mk_snap("sp", b, -float(b), metric="camera:all")
+    mk_snap("sp", 1, 50.0, metric="camera:1")
+    r = row(api, "sp")
+    assert [p["value"] for p in r["cameraSparkline"]] == [-float(b) for b in range(21, 0, -1)]
+    assert [p["value"] for p in r["gameSparkline"]] == [float(b) for b in range(21, 0, -1)]  # unchanged
 
 
 def test_divergence_surfaces(api):
@@ -209,6 +217,10 @@ def test_timeline_ordering_no_series(api):
         days = [x["day"] for x in t[key]]
         assert days == sorted(days)
     assert "series" not in str(t)
+    assert all(s["qualityOk"] is None for s in t["sessions"])  # tracing: no capture quality
+    mk_session("tl", 0, game="camera", counts=False)
+    s = api.get("/api/patients/tl/timeline").json()["sessions"][-1]
+    assert (s["gameType"], s["qualityOk"], s["countsForTrend"]) == ("camera", False, False)
 
 
 def test_home_steps_and_done_today(api):
@@ -216,8 +228,13 @@ def test_home_steps_and_done_today(api):
     h = api.get("/api/patients/hm/home").json()
     assert [(s["id"], s["kind"], s["title"]) for s in h["steps"]] == [
         ("ratings", "ratings", "Počutje in bolečina"), ("trace:1", "game", "Ravna črta"),
-        ("trace:2", "game", "Krog"), ("trace:3", "game", "Labirint")]
+        ("trace:2", "game", "Krog"), ("trace:3", "game", "Labirint"),
+        ("camera:1", "game", "Dlan"), ("camera:2", "game", "Roke v stran"), ("camera:3", "game", "Dvig rok")]
     assert h["steps"][1]["gameType"] == "trace" and h["steps"][1]["level"] == 1
+    assert [(s["gameType"], s["level"]) for s in h["steps"][4:]] == [("camera", 1), ("camera", 2), ("camera", 3)]
+    # the hand exercise first and not skippable; the two arm exercises may be skipped
+    assert [s["skippable"] for s in h["steps"]] == [False, False, False, False, False, True, True]
+    assert [s["durationS"] for s in h["steps"]] == [None, None, None, None, 21.0, 42.0, 42.0]
     assert not any(s["done"] for s in h["steps"]) and h["selfcheckDoneToday"] is False
     assert h["lastSelfcheckDay"] is None and h["hand"] == "right"
     mk_checkin("hm", 2)
@@ -225,26 +242,76 @@ def test_home_steps_and_done_today(api):
     mk_session("hm", 0, level=1)
     mk_session("hm", 0, level=2, completed=False, counts=False)  # aborted: not done
     mk_session("hm", 1, level=3)  # yesterday: not done today
+    mk_session("hm", 0, level=1, game="camera", completed=False, counts=False)  # aborted camera: not done
     h = api.get("/api/patients/hm/home").json()
-    assert [s["done"] for s in h["steps"]] == [True, True, False, False]
+    assert [s["done"] for s in h["steps"]] == [True, True, False, False, False, False, False]
     assert h["selfcheckDoneToday"] is False and h["lastSelfcheckDay"] == clock.today().isoformat()
     mk_session("hm", 0, level=2)
     mk_session("hm", 0, level=3)
-    assert api.get("/api/patients/hm/home").json()["selfcheckDoneToday"] is True
+    # ratings + every tracing level: done, although no camera exercise was done
+    h = api.get("/api/patients/hm/home").json()
+    assert h["selfcheckDoneToday"] is True
+    assert [s["done"] for s in h["steps"]] == [True, True, True, True, False, False, False]
+    # a completed camera session counts even when its capture quality was poor (it was done)
+    mk_session("hm", 0, level=1, game="camera", counts=False)
+    mk_session("hm", 0, level=3, game="camera")
+    h = api.get("/api/patients/hm/home").json()
+    assert [s["done"] for s in h["steps"][4:]] == [True, False, True] and h["selfcheckDoneToday"] is True
+
+
+def test_camera_steps_alone_never_complete_the_selfcheck(api):
+    mk_patient("cm")
+    mk_checkin("cm", 0)
+    for lv in (1, 2, 3):
+        mk_session("cm", 0, level=lv, game="camera")
+    h = api.get("/api/patients/cm/home").json()
+    assert [s["done"] for s in h["steps"]] == [True, False, False, False, True, True, True]
+    assert h["selfcheckDoneToday"] is False
 
 
 def test_summary_without_data_and_with_points(api):
     mk_patient("sm")
     s = api.get("/api/patients/sm/selfcheck/summary").json()
-    assert (s["tone"], s["trend"], s["levelsDone"], s["levelsTotal"], s["points"]) == ("first", "unknown", 0, 3, [])
+    assert (s["tone"], s["trend"], s["levelsDone"], s["levelsTotal"], s["games"]) == ("first", "unknown", 0, 6, [])
     assert s["title"] and s["text"] and s["day"] == clock.today().isoformat()
     for b, v in ((20, -9.0), (13, -6.0), (5, 0.0), (3, 6.0), (1, -1.0)):
         mk_snap("sm", b, v)
     s = api.get("/api/patients/sm/selfcheck/summary").json()
     # today has nothing yet: describes the latest day; points are the last 14 days only
-    assert [(p["value"], p["label"]) for p in s["points"]] == [
+    [g] = s["games"]  # no camera data: tracing only
+    assert (g["gameType"], g["title"]) == ("trace", "Sledenje")
+    assert [(p["value"], p["label"]) for p in g["points"]] == [
         (-6.0, "lower"), (0.0, "usual"), (6.0, "better"), (-1.0, "usual")]
+    assert g["trend"] == "stable" and g["personalBestDay"] == (clock.today() - timedelta(days=3)).isoformat()
     assert s["tone"] == "similar" and s["trend"] == "stable"  # -1 vs the mean of the previous days
+    mk_session("sm", 0, level=1)
+    mk_session("sm", 0, level=2, game="camera")
+    s = api.get("/api/patients/sm/selfcheck/summary").json()
+    assert (s["levelsDone"], s["levelsTotal"]) == (2, 6)  # game steps of all games
+
+
+def test_summary_and_progress_with_camera_data(api):
+    mk_patient("cg")
+    for b, v in ((6, 0.0), (4, 1.0), (2, -1.0), (1, 0.5)):
+        mk_snap("cg", b, v)
+    for b, v in ((30, 2.0), (6, -2.0), (4, -4.0), (2, -6.0), (1, -9.0)):
+        mk_snap("cg", b, v, metric="camera:all")
+    mk_snap("cg", 1, -30.0, metric="camera:1")  # per-level rows are not shown to the patient
+    s = api.get("/api/patients/cg/selfcheck/summary").json()
+    assert [g["gameType"] for g in s["games"]] == ["trace", "camera"]  # tracing first
+    trace, camera = s["games"]
+    assert camera["title"] == "Vaje s kamero" and trace["title"] == "Sledenje"
+    assert [p["value"] for p in trace["points"]] == [0.0, 1.0, -1.0, 0.5]
+    assert [p["value"] for p in camera["points"]] == [-2.0, -4.0, -6.0, -9.0]  # last 14 days
+    assert camera["points"][-1]["label"] == "lower"
+    assert trace["trend"] == "stable" and camera["trend"] == "declining"
+    assert camera["personalBestDay"] == (clock.today() - timedelta(days=30)).isoformat()  # whole history
+    # any game declining: the overall trend is declining (said calmly)
+    assert s["trend"] == "declining"
+    p = api.get("/api/patients/cg/progress").json()
+    assert [g["gameType"] for g in p["games"]] == ["trace", "camera"]
+    assert [x["value"] for x in p["games"][1]["points"]] == [2.0, -2.0, -4.0, -6.0, -9.0]  # whole history
+    assert p["trend"] == "declining" and p["games"][0]["trend"] == "stable"
 
 
 def test_progress(api):
@@ -255,8 +322,9 @@ def test_progress(api):
         mk_checkin("pg", b, wellbeing=6, pain=4)
     mk_session("pg", 5)
     p = api.get("/api/patients/pg/progress").json()
-    assert [x["value"] for x in p["points"]] == [-2.0, 7.5, 3.0]
-    assert p["personalBestDay"] == (clock.today() - timedelta(days=8)).isoformat()
+    [g] = p["games"]  # no camera data
+    assert g["gameType"] == "trace" and [x["value"] for x in g["points"]] == [-2.0, 7.5, 3.0]
+    assert g["personalBestDay"] == (clock.today() - timedelta(days=8)).isoformat()
     assert [(r["wellbeing"], r["pain"]) for r in p["ratings"]] == [(6.0, 4.0)] * 4
     assert (p["weekDone"], p["weekGoal"]) == (4, 5)  # days 0, 1, 3 (check-ins) + 5 (session)
     assert p["clinicianReviewedAt"] is None

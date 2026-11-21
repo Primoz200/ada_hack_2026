@@ -4,7 +4,7 @@ import { api, unwrap, type SessionRaw, type SessionSummary } from '@/client/api'
 import { useAsync } from '@/lib/useAsync'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { LEVEL_NAMES, dayMs, durationText, formatDay, pickBaselineSession, pointsAttr, splitStrokes, targetPoints } from './model'
+import { LEVEL_NAMES, dayMs, durationText, formatDay, pickBaselineSession, pointsAttr, splitStrokes, targetPoints, type Series } from './model'
 import { regionWord } from './GameChart'
 import { shortDay } from './chartLayout'
 
@@ -114,7 +114,7 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <div className="flex h-full items-center justify-center p-4 text-center text-[0.875rem] text-muted-foreground">{children}</div>
 }
 
-export function TraceSvg({ series }: { series: Record<string, number[]> }) {
+export function TraceSvg({ series }: { series: Series }) {
   const target = targetPoints(series)
   const strokes = splitStrokes(series)
   if (target.length === 0 && strokes.length === 0) return <Empty>Seja nima shranjene sledi.</Empty>

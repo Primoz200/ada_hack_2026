@@ -1,0 +1,211 @@
+{
+ "1": {
+  "right": {
+   "n": 2,
+   "mean": {
+    "open_level": 1.5646021881315622,
+    "fist_level": 0.727705780273473,
+    "open_range": 0.8368964078580894,
+    "n_reps": 7.0,
+    "open_range_2d": 0.9555285150473011,
+    "timing_lag_ms": -83.33333333333212,
+    "timing_jitter_ms": 16.66666666666788,
+    "fps": 20.586770642396516,
+    "detect_frac": 1.0,
+    "visibility": 1.0,
+    "quality_ok": 1.0
+   },
+   "sd": {
+    "open_level": 0.006713318270797797,
+    "fist_level": 0.000254510188373247,
+    "open_range": 0.006967828459171044,
+    "n_reps": 0.0,
+    "open_range_2d": 0.020029473824906163,
+    "timing_lag_ms": 16.66666666666606,
+    "timing_jitter_ms": 16.66666666666606,
+    "fps": 0.03178605863441497,
+    "detect_frac": 0.0,
+    "visibility": 0.0,
+    "quality_ok": 0.0
+   }
+  },
+  "any": {
+   "n": 3,
+   "mean": {
+    "open_level": 1.5703773407164003,
+    "fist_level": 0.7577311169652448,
+    "open_range": 0.8126462237511558,
+    "n_reps": 7.0,
+    "open_range_2d": 0.9355331164836894,
+    "timing_lag_ms": -88.88888888888778,
+    "timing_jitter_ms": 11.111111111112223,
+    "fps": 20.597365995274654,
+    "detect_frac": 1.0,
+    "visibility": 1.0,
+    "quality_ok": 1.0
+   },
+   "sd": {
+    "open_level": 0.009836185044332254,
+    "fist_level": 0.04246274685571465,
+    "open_range": 0.03476362966374439,
+    "n_reps": 0.0,
+    "open_range_2d": 0.03266626917638067,
+    "timing_lag_ms": 15.713484026367365,
+    "timing_jitter_ms": 15.713484026367365,
+    "fps": 0.02996818347678405,
+    "detect_frac": 0.0,
+    "visibility": 0.0,
+    "quality_ok": 0.0
+   }
+  },
+  "left": {
+   "n": 1,
+   "mean": {
+    "open_level": 1.581927645886077,
+    "fist_level": 0.8177817903487883,
+    "open_range": 0.7641458555372886,
+    "n_reps": 7.0,
+    "open_range_2d": 0.8955423193564664,
+    "timing_lag_ms": -99.99999999999909,
+    "timing_jitter_ms": 9.094947017729282e-13,
+    "fps": 20.61855670103093,
+    "detect_frac": 1.0,
+    "visibility": 1.0,
+    "quality_ok": 1.0
+   },
+   "sd": {
+    "open_level": 0.0,
+    "fist_level": 0.0,
+    "open_range": 0.0,
+    "n_reps": 0.0,
+    "open_range_2d": 0.0,
+    "timing_lag_ms": 0.0,
+    "timing_jitter_ms": 0.0,
+    "fps": 0.0,
+    "detect_frac": 0.0,
+    "visibility": 0.0,
+    "quality_ok": 0.0
+   }
+  }
+ },
+ "2": {
+  "right": {
+   "n": 2,
+   "mean": {
+    "top_level": 104.75107944082671,
+    "rest_level": 16.906459574010075,
+    "n_reps": 5.0,
+    "lean_deg": 1.6978612572425447,
+    "hike": 0.1594464250570095,
+    "top_visibility": 0.8482749791656131,
+    "symmetry": 0.9472746102284328,
+    "fps": 20.59734419413717,
+    "detect_frac": 1.0,
+    "visibility": 0.919162653948368,
+    "quality_ok": 1.0
+   },
+   "sd": {
+    "top_level": 3.826430914435889,
+    "rest_level": 0.35203277890695617,
+    "n_reps": 0.0,
+    "lean_deg": 0.24343050818895406,
+    "hike": 0.0032696296311239825,
+    "top_visibility": 0.009583907737041764,
+    "symmetry": 0.0031953840357866192,
+    "fps": 0.02121250689375742,
+    "detect_frac": 0.0,
+    "visibility": 0.0016780972535550553,
+    "quality_ok": 0.0
+   }
+  },
+  "any": {
+   "n": 2,
+   "mean": {
+    "top_level": 104.75107944082671,
+    "rest_level": 16.906459574010075,
+    "n_reps": 5.0,
+    "lean_deg": 1.6978612572425447,
+    "hike": 0.1594464250570095,
+    "top_visibility": 0.8482749791656131,
+    "symmetry": 0.9472746102284328,
+    "fps": 20.59734419413717,
+    "detect_frac": 1.0,
+    "visibility": 0.919162653948368,
+    "quality_ok": 1.0
+   },
+   "sd": {
+    "top_level": 3.826430914435889,
+    "rest_level": 0.35203277890695617,
+    "n_reps": 0.0,
+    "lean_deg": 0.24343050818895406,
+    "hike": 0.0032696296311239825,
+    "top_visibility": 0.009583907737041764,
+    "symmetry": 0.0031953840357866192,
+    "fps": 0.02121250689375742,
+    "detect_frac": 0.0,
+    "visibility": 0.0016780972535550553,
+    "quality_ok": 0.0
+   }
+  }
+ },
+ "3": {
+  "right": {
+   "n": 1,
+   "mean": {
+    "top_level": 2.096326218213703,
+    "rest_level": -1.2378474327163633,
+    "n_reps": 5.0,
+    "lean_deg": 3.2120832509542874,
+    "hike": 0.18654125598736462,
+    "top_visibility": 0.9836323397368321,
+    "symmetry": 1.0372081103507156,
+    "fps": 20.576131687243414,
+    "detect_frac": 1.0,
+    "visibility": 0.8519813641826922,
+    "quality_ok": 1.0
+   },
+   "sd": {
+    "top_level": 0.0,
+    "rest_level": 0.0,
+    "n_reps": 0.0,
+    "lean_deg": 0.0,
+    "hike": 0.0,
+    "top_visibility": 0.0,
+    "symmetry": 0.0,
+    "fps": 0.0,
+    "detect_frac": 0.0,
+    "visibility": 0.0,
+    "quality_ok": 0.0
+   }
+  },
+  "any": {
+   "n": 1,
+   "mean": {
+    "top_level": 2.096326218213703,
+    "rest_level": -1.2378474327163633,
+    "n_reps": 5.0,
+    "lean_deg": 3.2120832509542874,
+    "hike": 0.18654125598736462,
+    "top_visibility": 0.9836323397368321,
+    "symmetry": 1.0372081103507156,
+    "fps": 20.576131687243414,
+    "detect_frac": 1.0,
+    "visibility": 0.8519813641826922,
+    "quality_ok": 1.0
+   },
+   "sd": {
+    "top_level": 0.0,
+    "rest_level": 0.0,
+    "n_reps": 0.0,
+    "lean_deg": 0.0,
+    "hike": 0.0,
+    "top_visibility": 0.0,
+    "symmetry": 0.0,
+    "fps": 0.0,
+    "detect_frac": 0.0,
+    "visibility": 0.0,
+    "quality_ok": 0.0
+   }
+  }
+ }
+}

@@ -1,35 +1,48 @@
 // Patient detail for the clinician. Plan section 9, Zdravnik 2 and 3.
 // Header (who, and when the next visit is) -> the alert -> the evidence -> how it was captured -> history.
+// Each measurement (tracing, camera exercises) has its own trend; a two-way switch picks which one is shown.
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
-import { ArrowLeft, CalendarClock } from 'lucide-react'
-import { api, unwrap, type PatientDetail, type SessionSummary, type Timeline } from '@/client/api'
+import { ArrowLeft, CalendarClock, Camera, OctagonAlert, PenLine, TriangleAlert } from 'lucide-react'
+import { api, unwrap, type Alert, type PatientDetail, type SessionSummary, type Timeline } from '@/client/api'
 import { paths } from '@/app/paths'
 import { Panel } from '@/components/app/Panel'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { useAsync } from '@/lib/useAsync'
 import { AlertCard } from './AlertCard'
+import { CameraSessions } from './CameraSessions'
 import { Y_AXIS_WIDTH, CHART_MARGIN } from './chartLayout'
-import { GameChart, regionWord, type View } from './GameChart'
+import { GameChart, PoorDot, regionWord, type View } from './GameChart'
 import { ActionLog, CheckinHistory, ModelNote } from './PatientSections'
 import { SessionReplay } from './SessionReplay'
 import { SymptomPanel } from './SymptomPanel'
 import {
+  GAMES,
+  GAME_TITLE,
   LEVELS,
-  LEVEL_NAMES,
   ageFrom,
+  alertGameSet,
+  countingSessions,
   dayMs,
+  defaultMeasurement,
   deltaWords,
   featureComparison,
   formatDay,
   formatFeature,
   formatPct,
+  gameMetric,
+  gameSessions,
+  hasGameData,
+  isPoorQuality,
+  latestModelVersion,
+  levelName,
   nextVisitText,
   plural,
   timeDomain,
   trendSummary,
   visitWhen,
+  type Game,
 } from './model'
 import { ErrorState, StatusBadge, UnderlineTabs } from './ui'
 
@@ -38,11 +51,18 @@ const SIDE_COL = 'grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_19rem]'
 
 export function ClinicianPatientPage() {
   const { patientId = '' } = useParams()
+  // a fresh page (measurement, level, selected session) for every patient
+  return <PatientPage key={patientId} patientId={patientId} />
+}
+
+function PatientPage({ patientId }: { patientId: string }) {
   const patient = useAsync(() => unwrap(api.GET('/api/patients/{patient_id}', { params: { path: { patient_id: patientId } } })), [patientId])
   const timeline = useAsync(() => unwrap(api.GET('/api/patients/{patient_id}/timeline', { params: { path: { patient_id: patientId } } })), [patientId])
   const meta = useAsync(() => unwrap(api.GET('/api/meta')), [])
-  const [view, setView] = useState<View>('all')
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  // null = not chosen yet: follow the open alert (camera-only alert -> camera)
+  const [chosen, setChosen] = useState<Game | null>(null)
+  const [views, setViews] = useState<Record<Game, View>>({ trace: 'all', camera: 'all' })
+  const [selectedIds, setSelectedIds] = useState<Record<Game, number | null>>({ trace: null, camera: null })
 
   const reload = () => {
     patient.reload()
@@ -63,19 +83,43 @@ export function ClinicianPatientPage() {
 
   const p = patient.data
   const tl = timeline.data
+  // one time axis for both measurements, so the ratings below never shift when switching
   const domain = timeDomain(tl)
-  const traceSessions = tl.sessions.filter((s) => s.gameType === 'trace')
-  const latest = [...traceSessions].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0]
-  const replayLevel = view !== 'all' ? view : (traceSessions.find((s) => s.id === selectedId)?.level ?? latest?.level ?? 1)
-  const levelList = traceSessions.filter((s) => s.level === replayLevel).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
-  const selected: SessionSummary | null = levelList.find((s) => s.id === selectedId) ?? levelList[levelList.length - 1] ?? null
+  const hasCamera = hasGameData(tl, 'camera')
+  const game: Game = hasCamera ? (chosen ?? defaultMeasurement(p.openAlert, true)) : 'trace'
+  const view = views[game]
+  const setView = (v: View) => setViews((cur) => ({ ...cur, [game]: v }))
+  const sessions = gameSessions(tl.sessions, game)
+  const latest = [...sessions].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0]
+  const selectedId = selectedIds[game]
+
+  // tracing: the replay shows one level; camera: the list follows the level tab (all exercises on "Skupaj")
+  const replayLevel = view !== 'all' ? view : (sessions.find((s) => s.id === selectedId)?.level ?? latest?.level ?? 1)
+  const levelList = sessions.filter((s) => s.level === replayLevel).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
+  const selected: SessionSummary | null =
+    game === 'trace'
+      ? (levelList.find((s) => s.id === selectedId) ?? levelList[levelList.length - 1] ?? null)
+      : (sessions.find((s) => s.id === selectedId && (view === 'all' || s.level === view)) ??
+        [...sessions].filter((s) => view === 'all' || s.level === view).sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0] ??
+        null)
   // the next visit is often weeks beyond the chart: say so at the chart's right edge
   const visitBeyond = tl.nextVisitDate != null && dayMs(tl.nextVisitDate) > domain.end ? p.daysToNextVisit : null
+  const hasPoor = sessions.some(isPoorQuality)
 
+  const selectSession = (s: SessionSummary) => setSelectedIds((cur) => ({ ...cur, [game]: s.id }))
   const select = (s: SessionSummary) => {
-    setSelectedId(s.id)
+    selectSession(s)
     document.getElementById('replay')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }
+
+  const levelTabs = (
+    <UnderlineTabs
+      label={game === 'camera' ? 'Vaja' : 'Stopnja igre'}
+      value={String(view)}
+      onChange={(v) => setView(v === 'all' ? 'all' : (Number(v) as View))}
+      items={[{ id: 'all', label: 'Skupaj' }, ...LEVELS.map((l) => ({ id: String(l), label: levelName(game, l) }))]}
+    />
+  )
 
   return (
     <>
@@ -84,7 +128,17 @@ export function ClinicianPatientPage() {
 
       <div className="space-y-6">
         {p.openAlert ? (
-          <AlertCard alert={p.openAlert} patient={p} today={tl.today} meta={meta.data} onChanged={reload} />
+          <AlertCard
+            alert={p.openAlert}
+            patient={p}
+            today={tl.today}
+            meta={meta.data}
+            onChanged={() => {
+              // keep the measurement on screen when the alert it was derived from is closed
+              setChosen(game)
+              reload()
+            }}
+          />
         ) : (
           <Panel className="flex flex-wrap items-center gap-x-4 gap-y-2 py-6 md:py-7" data-testid="status-panel">
             <StatusBadge status={p.status} size="lg" />
@@ -94,15 +148,20 @@ export function ClinicianPatientPage() {
         )}
 
         <Panel>
-          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-            <h2 className="text-2xl font-bold">Rezultati sledenja glede na lastno izhodišče</h2>
-            <UnderlineTabs
-              label="Stopnja igre"
-              value={String(view)}
-              onChange={(v) => setView(v === 'all' ? 'all' : (Number(v) as View))}
-              items={[{ id: 'all', label: 'Skupaj' }, ...LEVELS.map((l) => ({ id: String(l), label: LEVEL_NAMES[l] }))]}
-            />
-          </div>
+          {hasCamera ? (
+            <>
+              <h2 className="text-2xl font-bold">Meritve glede na lastno izhodišče</h2>
+              <div className="mt-5 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+                <MeasurementSwitch value={game} onChange={setChosen} alert={p.openAlert} />
+                {levelTabs}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+              <h2 className="text-2xl font-bold">Rezultati sledenja glede na lastno izhodišče</h2>
+              {levelTabs}
+            </div>
+          )}
 
           <div className={cn(SIDE_COL, 'mt-6')}>
             <div className="relative min-w-0">
@@ -114,10 +173,10 @@ export function ClinicianPatientPage() {
                   naslednji pregled {visitWhen(visitBeyond)} →
                 </span>
               )}
-              <GameChart timeline={tl} view={view} domain={domain} selectedId={selected?.id ?? null} onSelectSession={select} />
-              <ChartLegend isAll={view === 'all'} />
+              <GameChart timeline={tl} game={game} view={view} domain={domain} selectedId={selected?.id ?? null} onSelectSession={select} />
+              <ChartLegend game={game} isAll={view === 'all'} hasPoor={hasPoor} />
             </div>
-            <BasisPanel tl={tl} view={view} />
+            <BasisPanel tl={tl} game={game} view={view} />
           </div>
 
           <div className={cn(SIDE_COL, 'mt-8 border-t border-border pt-6')}>
@@ -133,15 +192,25 @@ export function ClinicianPatientPage() {
           </div>
 
           <div className="mt-6 border-t border-border pt-5">
-            <ModelNote meta={meta.data} />
+            <ModelNote meta={meta.data} cameraVersion={hasCamera ? latestModelVersion(tl.sessions, 'camera') : null} />
           </div>
         </Panel>
 
-        <Panel id="replay">
-          <h2 className="text-2xl font-bold">Predvajanje seje</h2>
-          <p className="mt-1 mb-6 text-[0.9375rem] text-muted-foreground">Kako se zajame podatek: dejanska sled čez želeno črto, ob njej seja iz izhodišča.</p>
-          <SessionReplay sessions={traceSessions} level={replayLevel} selected={selected} onSelect={(s) => setSelectedId(s.id)} />
-        </Panel>
+        {game === 'trace' ? (
+          <Panel id="replay">
+            <h2 className="text-2xl font-bold">Predvajanje seje</h2>
+            <p className="mt-1 mb-6 text-[0.9375rem] text-muted-foreground">Kako se zajame podatek: dejanska sled čez želeno črto, ob njej seja iz izhodišča.</p>
+            <SessionReplay sessions={sessions} level={replayLevel} selected={selected} onSelect={selectSession} />
+          </Panel>
+        ) : (
+          <Panel id="replay">
+            <h2 className="text-2xl font-bold">Zadnje seje</h2>
+            <p className="mt-1 mb-6 text-[0.9375rem] text-muted-foreground">
+              Vaje s kamero: kako je pacient opravil posamezno vajo. Seja s slabim zajemom se shrani, a ne šteje v trend.
+            </p>
+            <CameraSessions sessions={sessions} level={view === 'all' ? null : view} selected={selected} onSelect={selectSession} />
+          </Panel>
+        )}
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           <Section title="Dnevne ocene" hint="Zadnjih 14 vnosov. Počutje: višje je bolje. Bolečina: višje je slabše.">
@@ -153,6 +222,45 @@ export function ClinicianPatientPage() {
         </div>
       </div>
     </>
+  )
+}
+
+const GAME_ICON = { trace: PenLine, camera: Camera }
+
+/** Two-way switch between the measurements. A measurement the open alert is about carries the alert's icon. */
+function MeasurementSwitch({ value, onChange, alert }: { value: Game; onChange: (g: Game) => void; alert: Alert | null | undefined }) {
+  const flagged = new Set(alert && alert.severity !== 'grey' ? alertGameSet(alert) : [])
+  const FlagIcon = alert?.severity === 'red' ? OctagonAlert : TriangleAlert
+  const flagColor = alert?.severity === 'red' ? 'text-status-red' : 'text-status-amber'
+  return (
+    <div role="radiogroup" aria-label="Meritev" className="flex w-full rounded-lg border border-input bg-card p-1 sm:inline-flex sm:w-auto" data-testid="measurement-switch">
+      {GAMES.map((g) => {
+        const on = value === g
+        const Icon = GAME_ICON[g]
+        return (
+          <button
+            key={g}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(g)}
+            className={cn(
+              'inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 text-base font-semibold whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/45 sm:flex-none sm:px-4',
+              on ? 'bg-primary text-primary-foreground' : 'text-primary hover:bg-accent',
+            )}
+          >
+            <Icon className="hidden size-[1.125rem] sm:block" strokeWidth={1.75} aria-hidden />
+            {GAME_TITLE[g]}
+            {flagged.has(g) && (
+              <span className={cn('-mr-1 inline-flex size-6 items-center justify-center rounded-full', on ? 'bg-card' : '', flagColor)}>
+                <FlagIcon className="size-4" strokeWidth={2} aria-hidden />
+                <span className="sr-only">(pod izhodiščem, odprto opozorilo)</span>
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -213,44 +321,69 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   )
 }
 
-function ChartLegend({ isAll }: { isAll: boolean }) {
+function ChartLegend({ game, isAll, hasPoor }: { game: Game; isAll: boolean; hasPoor: boolean }) {
+  const text =
+    game === 'camera'
+      ? isAll
+        ? 'Črta: skupni trend vseh vaj s kamero glede na lastno izhodišče. Modri pas: izhodišče ±5 točk. Črtkano: prag opozorila.'
+        : 'Bledi krogi: posamezne seje (klik odpre podrobnosti). Črta: glajen rezultat. Modri pas: izhodišče ±5 točk.'
+      : isAll
+        ? 'Črta: skupni trend vseh treh stopenj glede na lastno izhodišče. Modri pas: izhodišče ±5 točk. Črtkano: prag opozorila.'
+        : 'Bledi krogi: posamezne seje (klik odpre predvajanje). Črta: glajen rezultat. Modri pas: izhodišče ±5 točk.'
   return (
     <p className="mt-2 text-[0.875rem] text-muted-foreground" style={{ paddingLeft: Y_AXIS_WIDTH }}>
-      {isAll
-        ? 'Črta: skupni trend vseh treh stopenj glede na lastno izhodišče. Modri pas: izhodišče ±5 točk. Črtkano: prag opozorila.'
-        : 'Bledi krogi: posamezne seje (klik odpre predvajanje). Črta: glajen rezultat. Modri pas: izhodišče ±5 točk.'}
+      {text}
+      {hasPoor && (
+        <span className="ml-1 inline-flex items-center gap-1.5 whitespace-nowrap">
+          <svg width="14" height="14" aria-hidden className="shrink-0">
+            <PoorDot cx={7} cy={7} />
+          </svg>
+          slaba kakovost zajema, ne šteje
+        </span>
+      )}
     </p>
   )
 }
 
 /** "Never a bare score": change vs baseline, number of sessions, and the features that moved most. */
-function BasisPanel({ tl, view }: { tl: Timeline; view: View }) {
-  const metric = view === 'all' ? 'trace:all' : `trace:${view}`
-  const sum = trendSummary(tl.trends, metric)
-  const traceSessions = tl.sessions.filter((s) => s.gameType === 'trace' && s.completed)
-  const scoped = view === 'all' ? traceSessions : traceSessions.filter((s) => s.level === view)
-  const n = view === 'all' ? traceSessions.length : sum.nSessions || scoped.length
-  const fc = featureComparison(traceSessions, view === 'all' ? null : view)
+function BasisPanel({ tl, game, view }: { tl: Timeline; game: Game; view: View }) {
+  const sum = trendSummary(tl.trends, gameMetric(game, view))
+  const counted = countingSessions(tl.sessions, game)
+  const scoped = view === 'all' ? counted : counted.filter((s) => s.level === view)
+  const n = view === 'all' ? counted.length : sum.nSessions || scoped.length
+  const nPoor = gameSessions(tl.sessions, game).filter((s) => isPoorQuality(s) && (view === 'all' || s.level === view)).length
+  const fc = featureComparison(tl.sessions, view === 'all' ? null : view, 3, game)
   const noBaseline = sum.delta == null
   const latestScore = view === 'all' ? null : [...scoped].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0]?.score
+  const perLevel = game === 'camera' ? 'na vajo' : 'na stopnjo'
 
   return (
     <aside className="min-w-0 space-y-7" data-testid="basis-panel">
       <div>
         <h3 className="text-[0.9375rem] font-medium text-muted-foreground">Sprememba glede na izhodišče</h3>
         <p className="mt-1 text-[1.625rem] leading-tight font-bold">{noBaseline ? 'Še ni izhodišča' : capitalize(deltaWords(sum.delta))}</p>
+        {n === 0 && nPoor === 0 ? (
+          <p className="mt-1.5 text-[0.9375rem] text-muted-foreground">Za {game === 'camera' ? 'to vajo' : 'to stopnjo'} še ni sej.</p>
+        ) : (
         <p className="mt-1.5 text-[0.9375rem] text-muted-foreground">
           Na podlagi {n} {plural(n, 'seje', 'sej', 'sej', 'sej')}
           {view !== 'all' && sum.baseline != null && <>; izhodišče: {regionWord(sum.baseline)}</>}
           {latestScore != null && <>; zadnja seja: {regionWord(latestScore)}</>}.
+          {nPoor > 0 && (
+            <>
+              {' '}
+              {nPoor} {plural(nPoor, 'seja', 'seji', 'seje', 'sej')} s slabim zajemom ne {plural(nPoor, 'šteje', 'štejeta', 'štejejo', 'šteje')}.
+            </>
+          )}
           {noBaseline && <> Prva seja je vaja, izhodišče je mediana sej 2–4, zato so potrebne vsaj {MIN_SESSIONS_FOR_BASELINE} seje.</>}
         </p>
+        )}
       </div>
 
       <div>
         <h3 className="text-[0.9375rem] font-medium text-muted-foreground">Kaj se je najbolj premaknilo</h3>
         {fc.rows.length === 0 ? (
-          <p className="mt-1.5 text-[0.9375rem]">Za primerjavo značilk je premalo sej (potrebnih je vsaj 5 na stopnjo).</p>
+          <p className="mt-1.5 text-[0.9375rem]">Za primerjavo značilk je premalo sej (potrebnih je vsaj 5 {perLevel}).</p>
         ) : (
           <>
             <table className="mt-2 w-full text-[0.9375rem]" data-testid="feature-table">
@@ -267,7 +400,7 @@ function BasisPanel({ tl, view }: { tl: Timeline; view: View }) {
                   <tr key={`${r.level}-${r.key}`} className="border-t border-border align-top">
                     <td className="py-2 pr-1 leading-snug">
                       {r.label}
-                      {view === 'all' && <span className="block text-[0.8125rem] text-muted-foreground">{LEVEL_NAMES[r.level]}</span>}
+                      {view === 'all' && <span className="block text-[0.8125rem] text-muted-foreground">{levelName(game, r.level)}</span>}
                     </td>
                     <td className="tabular py-2 pl-2 text-right text-muted-foreground">{formatFeature(r.baseline)}</td>
                     <td className="tabular py-2 pl-2 text-right text-muted-foreground">{formatFeature(r.recent)}</td>

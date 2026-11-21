@@ -61,9 +61,11 @@ def entry_days(db: Session, patient_id: str) -> tuple[set, set, int, int]:
     return set(s_rows), set(c_rows), len(s_rows), len(c_rows)
 
 
-def combined_snapshots(db: Session, patient_id: str) -> list[TrendSnapshot]:
+def combined_snapshots(db: Session, patient_id: str, game: str = "trace") -> list[TrendSnapshot]:
+    """<game>:all snapshots with a delta, oldest first. Status, reason and the detail summary
+    stay about tracing; camera exercises have their own sparkline and timeline trends."""
     return list(db.exec(select(TrendSnapshot).where(
-        TrendSnapshot.patient_id == patient_id, TrendSnapshot.metric == "trace:all",
+        TrendSnapshot.patient_id == patient_id, TrendSnapshot.metric == f"{game}:all",
         TrendSnapshot.delta != None).order_by(TrendSnapshot.day)).all())  # noqa: E711
 
 
@@ -90,7 +92,8 @@ def patient_state(db: Session, p: Patient, today: date) -> PatientState:
             status, reason = "no_data", f"Brez vnosa že {silent} dni."
         elif latest is None:
             scored = db.exec(select(GameSession.game_type, GameSession.level).where(
-                GameSession.patient_id == p.id, GameSession.completed == True,  # noqa: E712
+                GameSession.patient_id == p.id, GameSession.game_type == "trace",
+                GameSession.completed == True,  # noqa: E712
                 GameSession.counts_for_trend == True)).all()  # noqa: E712
             per_level = Counter(tuple(r) for r in scored)  # the baseline is per level
             n = min(max(per_level.values(), default=0), BASELINE_NEEDED - 1)
@@ -110,9 +113,10 @@ def patient_state(db: Session, p: Patient, today: date) -> PatientState:
 SPARK_POINTS = 21  # the last N days that have a value
 
 
-def game_sparkline(db: Session, patient_id: str, today: date, n: int = SPARK_POINTS) -> list[tuple[date, float]]:
-    """Combined trend (trace:all delta) of the last n days that have one."""
-    return [(s.day, s.delta) for s in combined_snapshots(db, patient_id) if s.day <= today][-n:]
+def game_sparkline(db: Session, patient_id: str, today: date, n: int = SPARK_POINTS,
+                   game: str = "trace") -> list[tuple[date, float]]:
+    """Combined trend (<game>:all delta) of the last n days that have one."""
+    return [(s.day, s.delta) for s in combined_snapshots(db, patient_id, game) if s.day <= today][-n:]
 
 
 def checkins_of(db: Session, patient_id: str, upto: Optional[date] = None) -> list[Checkin]:
@@ -146,5 +150,6 @@ def completed_levels(db: Session, patient_id: str, day: date) -> set[tuple[str, 
     return {(g, lv) for g, lv in rows}
 
 
-def pathway_levels(pathway: Pathway) -> list[tuple[str, int]]:
-    return [(g["gameType"], lv) for g in pathway.games for lv in g["levels"]]
+def pathway_levels(pathway: Pathway) -> list[tuple[str, int, bool]]:
+    """(game_type, level, skippable) of the pathway's games, in self-check order."""
+    return [(g["gameType"], lv, lv in g.get("optionalLevels", [])) for g in pathway.games for lv in g["levels"]]
