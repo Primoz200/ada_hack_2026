@@ -162,7 +162,7 @@ Evaluating the alerts of a patient as of a day, after every ingested :Checkin: o
 
 # missing-data-alerts
 A grey `no_data` alert (source missing, reason "Pacient že več dni nima nobenega vnosa ali meritve.", extra `missedDays`) opens for a patient without an open alert when the discharge was at least 4 days ago and at least 4 days have passed since the latest of their last check-in day, last session day and discharge date.
-- A sweep over all patients does this as of a day; it runs when the patient list is read and during the seed.
+- A sweep over all patients does this as of a day; it runs when the patient list is read and during the seed. The sweep only closes grey alerts that new data answered and opens grey ones; it never evaluates the game or check-in rules and never changes another alert's evidence.
 - An open grey `no_data` alert closes by itself, closed by `system` with no outcome, as soon as the patient has a check-in or a session on or after its opening day, unless a live yellow or red trigger escalates it instead.
 
 # alert-api
