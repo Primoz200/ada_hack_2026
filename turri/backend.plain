@@ -69,6 +69,7 @@ import:
   - `APP_DB_URL` is the SQLAlchemy URL of the database, default a SQLite file `data/app.db` in the folder above the package (the folder is created when missing); `sqlite://` is an in-memory database kept on one connection (`StaticPool`, `check_same_thread=False`).
   - `APP_TODAY` sets :Today:.
   - `APP_KEEP_DB` set to `1` makes startup keep an existing database and seed only an empty one; otherwise every startup resets and reseeds the demo.
+  - `APP_SEED_HISTORY` set to `0` makes seeding the demo skip the history replay, so it seeds the pathways, the clinician and the patients only; default `1`.
   - `APP_MODELS_DIR` is the folder of the external ML models, default `models` in the folder above the package (in the platform repository that is `backend/models/`).
   - `APP_FRONTEND_DIST` is the built frontend, default `frontend/dist` two folders above the package; when it exists, `/assets` is served from it and every other non-API GET path returns the file at that path or `index.html`.
 - :Implementation: gets :Today: and the current time only through one clock module, `app/services/clock.py`, never from `date.today()` or `datetime.now()` elsewhere.
@@ -83,6 +84,8 @@ import:
   - Any failure to import or call it is logged and makes the :Scorer: use the stand-in.
 - :Implementation: keeps a copy of [the tracer levels](resources/tracer_levels.json) as `app/seed/tracer_levels.json` and reads the level paths from it.
 - :UnitTests: use FastAPI's `TestClient` and an in-memory SQLite engine per test, with `APP_KEEP_DB=1` and :Today: fixed to 2026-11-21.
+- :UnitTests: run with `APP_SEED_HISTORY=0`, except the tests of the history replay, which replay it once per test module and share that database.
+  - The whole unit test suite finishes in under 60 seconds.
 - :UnitTests: never need `APP_MODELS_DIR` to exist: without the external model the :Scorer: falls back to the stand-in.
 
 ***test reqs***

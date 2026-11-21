@@ -7,4 +7,5 @@ ENV_FILE="${TURRI_ENV_FILE:-$HOME/.config/turri/bedrock.env}"
 [ -f "$ENV_FILE" ] || { echo "missing $ENV_FILE (see turri/README.md)"; exit 2; }
 set -a; . "$ENV_FILE"; set +a
 cd "$(dirname "$0")"
+export TURRI_COMMAND_TIMEOUT="${TURRI_COMMAND_TIMEOUT:-600}"
 exec turri "$@"
