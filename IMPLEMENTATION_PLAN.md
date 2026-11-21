@@ -7,7 +7,7 @@ Ozadje in viri: `reports/Platforma za spremljanje pacientov po odpustu.md` (plat
 
 **En stavek:** spletni portal, ki pri okrevanjih s tveganjem za poslabšanje motorike združi pacientovo kratko dnevno poročilo (subjektivno) s 3-minutnimi igrami, ki merijo gibanje (objektivno), in zdravnika opozori samo takrat, ko se trend glede na pacientovo lastno izhodišče obrne navzdol.
 
-**Naprave:** pacientov del teče na telefonu (brskalnik). Vsi testi z vlečenjem se izvajajo izključno s prstom; testov z miško ni. Zdravnikov del je namenjen računalniku.
+**Naprave:** pacientov del teče na telefonu (brskalnik). Testi z vlečenjem se izvajajo s prstom; **za MVP in posnetke za predstavitev je dovoljena tudi miška** (sledenje na računalniku), zato koda sprejema oba vnosa. Zdravnikov del je namenjen računalniku.
 
 **Predstavitev:** dema v živo ne bo in platforma med nastopom ne bo odprta. Funkcionalnost pokaževa nadzorovano, v PowerPointu ali na statični spletni strani, s slikami zaslona in kratkim videom, ki jih posnameva sama. Vse, kar želiva pokazati, mora biti zato delujoče in posneto pred zamrznitvijo.
 
@@ -125,7 +125,7 @@ interface GameResult {
   completed: boolean;       // false, če je pacient prekinil
   series: Record<string, number[]>;   // vsebina je odvisna od igre, glej spodaj
   clientMeta: {
-    inputDevice: "touch" | "camera";      // testov z miško ni
+    inputDevice: "touch" | "mouse" | "camera";  // miška dovoljena za MVP / demo
     canvasW: number; canvasH: number;   // CSS piksli
     devicePixelRatio: number;
     userAgent: string;
@@ -139,16 +139,19 @@ interface GameResult {
 
 | Ključ v `series` | Pomen |
 |---|---|
-| `targetX`, `targetY` | želena črta kot zaporedje točk, v vrstnem redu risanja |
+| `targetX`, `targetY` | želena črta kot zaporedje točk, v vrstnem redu risanja (iz `shared/tracer_levels.json`, deljeno s 1000) |
 | `t` | čas vsake točke dejanske sledi v ms od prvega dotika |
 | `x`, `y` | dejanska sled prsta |
-| `strokeId` | zaporedna številka potega; poveča se ob vsakem dvigu prsta |
+| `strokeId` | zaporedna številka potega; poveča se ob vsakem dvigu prsta oziroma spustu gumba miške |
+
+Stopnje sledenja (fiksne oblike, definirane v `shared/tracer_levels.json`, ki ga bereta igra in model): `level` 1 = `line`, 2 = `circle`, 3 = `maze`. Merilni krog = vse tri stopnje, vsaka enkrat (ena seja na stopnjo). Pravila igre (začetek, konec po ≥ 90 % poti, časovna omejitev, navodilo »čim natančneje, v svojem tempu«) so v `docs/tracer_data_spec.md`.
 
 Pravila zajema:
-- Koordinate so normalizirane na 0–1 glede na platno (ista oblika na vsakem zaslonu); velikost platna je v `clientMeta`.
-- Samo prst: Pointer Events (`pointerdown/move/up`), upoštevajo se le dogodki s `pointerType === "touch"`. Na računalniku igra pokaže napotek »Odprite na telefonu« (za razvoj zadošča emulacija dotika v razvojnih orodjih brskalnika). Na platnu `touch-action: none` in `setPointerCapture`, da stran med risanjem ne drsi.
+- Koordinate so normalizirane na 0–1 glede na platno (ista oblika na vsakem zaslonu); velikost platna je v `clientMeta`. **Platno je kvadratno** (`canvasW == canvasH`), da sta obe osi v enakem merilu; sicer se krog v podatkih pokvari v elipso in razdalje od črte niso primerljive.
+- Ko prst ali miška miruje, brskalnik ne pošilja dogodkov; postanek se vidi kot vrzel v `t` (zato je `t` za vsako točko obvezen). Prevzorčenje naredi model.
+- Prst ali miška: Pointer Events (`pointerdown/move/up`), upoštevajo se dogodki s `pointerType` `"touch"` ali `"mouse"` (pri miški se sled beleži le med držanjem levega gumba). `inputDevice` v `clientMeta` pove, s čim je bila seja narejena; trend primerja le seje z istim vnosom, ker miška in prst nista primerljiva. Na platnu `touch-action: none` in `setPointerCapture`, da stran med risanjem ne drsi.
 - Čas iz `event.timeStamp`; dodatne točke iz `getCoalescedEvents()`, kjer jih brskalnik ponudi. Brez prevzorčenja ali glajenja na odjemalcu: model dobi surovo sled.
-- Dvigi prsta in prekinitev se zabeležijo, ne zavržejo.
+- Dvigi prsta oziroma spusti gumba in prekinitev se zabeležijo, ne zavržejo.
 
 **Backend funkciji, ki ju dostavi Primož**
 
@@ -160,7 +163,8 @@ def score_session(game_type: str, level: int, hand: str,
     # impairment_class: Literal["normal","mild","moderate","severe"], model_version: str
 
 def assess_trend(history: list[ScoredSession]) -> TrendResult:
-    # history: VSE pretekle seje iste igre za pacienta, urejene po času
+    # history: VSE pretekle seje iste igre IN iste stopnje za pacienta, urejene po času
+    #          (ocene različnih stopenj niso primerljive, zato trend teče ločeno po stopnji)
     #          (datum, trajanje, stopnja, značilke, ocena)
     # TrendResult: direction: Literal["improving","stable","declining","insufficient_data"],
     #              baseline: float | None, smoothed: float | None,
@@ -187,7 +191,7 @@ Da nihče ne čaka:
 | `patient` | ime (izmišljeno), rojstno leto, pot okrevanja, stran, datum odpusta, datum naslednjega pregleda | Patient, CarePlan |
 | `clinician` | ime, vloga | Practitioner |
 | `checkin` | pacient, datum, opozorilni znaki, odgovori JSON, skrb (ne / malo / želim klic) + prosto besedilo, kdo je odgovarjal (sam / s pomočjo / svojec) | QuestionnaireResponse |
-| `game_session` | pacient, igra, stopnja, začetek, trajanje v ms, dokončano, naprava (dotik / kamera), ocena, razred, različica modela, značilke JSON | Observation |
+| `game_session` | pacient, igra, stopnja, začetek, trajanje v ms, dokončano, naprava (dotik / miška / kamera), ocena, razred, različica modela, značilke JSON | Observation |
 | `session_raw` | seja, surove vrste (pri sledenju: želena črta, dejanska sled s časi, potegi), `clientMeta` | Observation.valueSampledData |
 | `trend_snapshot` | pacient, metrika, datum, št. sej, izhodišče, EWMA, naklon, sprememba v %, stanje | izpeljan Observation |
 | `alert` | pacient, vir (igra / vprašalnik), pravilo, stopnja (rdeča / rumena / siva), stanje (novo / potrjeno / zaprto), dokazi JSON, kdo in kdaj, izid, opomba | Flag |
@@ -323,13 +327,13 @@ Mejnik, ki ne sme zdrsniti: **sobota 21.30, navpični rez deluje od konca do kon
 
 ## 12. Odprte točke
 
-Rešeno 21. 11.: Primož dela igre, modele in točkovanje, Matevž platformo; vse teče lokalno; za povzetek imava ključe Azure; Codeplainovega izziva ne rešujeva; pacientov del teče na telefonu, testi samo s prstom; dema v živo ni, platformo posnameva in pokaževa v PowerPointu ali na statični strani; pri testih s kamero je telefon naslonjen na mizi, snema sprednja kamera.
+Rešeno 21. 11.: Primož dela igre, modele in točkovanje, Matevž platformo; vse teče lokalno; za povzetek imava ključe Azure; Codeplainovega izziva ne rešujeva; pacientov del teče na telefonu, testi s prstom (za MVP/demo tudi z miško na računalniku); dema v živo ni, platformo posnameva in pokaževa v PowerPointu ali na statični strani; pri testih s kamero je telefon naslonjen na mizi, snema sprednja kamera.
 
 1. **Rok:** 11.00 ali 12.00? Vprašajta organizatorje.
-2. **Kdo izračuna trend?** Načrt predvidi `assess_trend` pri Primožu in privzeto izvedbo (izhodišče + EWMA) pri Matevžu. Primož naj potrdi podpis in pove, ali njegov model vrne tudi smer trenda.
-3. **Oblika surovih podatkov sledenja** (tabela v poglavju 5): Primož naj potrdi ključe in normalizacijo, preden začne generator sintetike, da sta sintetika in pravi zajem enaka. Sintetika mora posnemati sled prsta (ne miške).
+2. **Kdo izračuna trend?** ~~Odprto~~ Potrjeno (Primož): podpis `assess_trend` drži, vrne tudi smer trenda (izhodišče lastnega pacienta + EWMA / z-vrednost), ločeno po igri in stopnji.
+3. **Oblika surovih podatkov sledenja** (tabela v poglavju 5): ~~Odprto~~ Potrjeno (Primož): ključi `targetX/targetY/t/x/y/strokeId`, normalizacija 0–1 na kvadratnem platnu, stopnje 1–3 iz `shared/tracer_levels.json`. Generator sintetike izpiše isto obliko; za MVP posnema sled miške, sled prsta se doda kasneje.
 4. **Prag 10 točk:** Primož naj iz sintetike sporoči znotrajosebni raztros ocene, da prag ni pod šumom.
-5. **Stopnja igre in trend:** merilni krog mora imeti fiksno težavnost, sicer ocene med dnevi niso primerljive. Ali je ocena 0–100 že prilagojena stopnji, ali naj platforma za meritev vedno zažene isto stopnjo, napredovanje pa je ločen vadbeni krog?
+5. **Stopnja igre in trend:** ~~Odprto~~ Potrjeno (Primož): stopnje so fiksne oblike in se ne spreminjajo z napredkom. Model dobi stopnjo kot vhod, trend pa se računa ločeno po stopnji (primerja se le ista stopnja). Ločenega vadbenega kroga ni.
 6. **Igra s kamero na telefonu:** ritem prstov, doseg z ramo ali oboje? Primož naj potrdi, da so značilke neodvisne od naklona in razdalje telefona, in doda mero kakovosti kadra. HTTPS na telefonu preizkusita danes.
 7. **Opozorilni znaki:** ali imata dostop do zdravnika ali mentorja, ki bi potrdil besedilo?
 
