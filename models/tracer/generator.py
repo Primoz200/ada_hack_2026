@@ -28,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
+from scipy.signal import lfilter
 
 from levels import Level, load_levels
 
@@ -57,6 +58,16 @@ def smooth_noise(rng, n, sigma_samples):
     return (x - x.mean()) / (x.std() + 1e-9)
 
 
+def ou_noise(rng, n, corr_samples):
+    """Zero-mean, unit-std Ornstein-Uhlenbeck noise (mean-reverting random walk): jagged like a stock chart."""
+    a = np.exp(-1.0 / max(corr_samples, 1.0))
+    e = rng.standard_normal(n) * np.sqrt(1.0 - a * a)
+    e[0] = rng.standard_normal()
+    x = lfilter([1.0], [1.0, -a], e)  # x[i] = a * x[i-1] + e[i]
+    x = gaussian_filter1d(x, 0.02 * GRID_HZ)  # hand inertia: no instant jumps (~20 ms)
+    return (x - x.mean()) / (x.std() + 1e-9)
+
+
 def sample_params(sev: float, rng: np.random.Generator) -> dict:
     """Map latent severity to concrete generator parameters (with per-person variation)."""
     def comp():  # each mechanism scales with sev, with individual variation
@@ -76,8 +87,11 @@ def sample_params(sev: float, rng: np.random.Generator) -> dict:
         "speed_fluct_corr_s": float(rng.uniform(0.15, 0.4)),
         "pause_rate_hz": float(0.01 + 0.25 * a_jerk ** 1.5),
         "pause_max_s": float(0.3 + 1.2 * sev),
-        "lateral_sd_frac": float(0.05 * np.exp(0.15 * rng.normal()) + 0.40 * a_acc),  # of channel width
+        "lateral_sd_frac": float(0.05 * np.exp(0.15 * rng.normal()) + 0.30 * a_acc),  # of channel width
         "lateral_corr_s": float(rng.uniform(0.3, 0.8)),
+        # jagged "stock chart" component: fast mean-reverting noise perpendicular to the path
+        "jitter_sd_frac": float(0.012 + 0.18 * a_acc ** 1.2),  # of channel width
+        "jitter_corr_s": float(rng.uniform(0.06, 0.15)),
         "overshoot_frac": float(0.05 + 0.6 * a_acc),  # of channel width, at corners
         "tremor_hz": float(rng.uniform(4.0, 8.0)) if has_tremor else 0.0,
         "tremor_amp": float(1.0 + 10.0 * a_trem) if has_tremor else 0.0,  # units (mouse damps tremor)
@@ -153,6 +167,7 @@ def simulate_attempt(level: Level, p: dict, rng: np.random.Generator) -> dict:
     n_grid = int(end_T * GRID_HZ) + 2
     grid_t = np.arange(n_grid) / GRID_HZ
     lat = smooth_noise(rng, n_grid, p["lateral_corr_s"] * GRID_HZ) * p["lateral_sd_frac"] * cw
+    lat += ou_noise(rng, n_grid, p["jitter_corr_s"] * GRID_HZ) * p["jitter_sd_frac"] * cw
     lateral = np.interp(t_s, grid_t, lat)
     # overshoot: outward of the turn, lagging slightly behind the corner
     lag = 15.0
@@ -161,17 +176,14 @@ def simulate_attempt(level: Level, p: dict, rng: np.random.Generator) -> dict:
     if max_curv > 0.01:  # only real corners (maze), not the gentle circle
         lateral += -np.sign(curv_lag) * (np.abs(curv_lag) / max_curv) * p["overshoot_frac"] * cw
 
-    xy = base_xy + normal * lateral[:, None]
-
-    # --- tremor ---------------------------------------------------------------------------
+    # --- tremor: oscillation perpendicular to the path (up/down, no loops) ------------------
     if p["tremor_amp"] > 0:
         f = p["tremor_hz"] * (1.0 + 0.05 * smooth_noise(rng, n_grid, GRID_HZ))
         phase = 2 * np.pi * np.cumsum(f) / GRID_HZ
         amp = p["tremor_amp"] * np.clip(1.0 + 0.3 * smooth_noise(rng, n_grid, 0.5 * GRID_HZ), 0.2, None)
-        theta = rng.uniform(0, np.pi)
-        osc = np.interp(t_s, grid_t, amp * np.sin(phase))
-        osc2 = np.interp(t_s, grid_t, 0.4 * amp * np.cos(phase))
-        xy += np.column_stack([osc * np.cos(theta) - osc2 * np.sin(theta), osc * np.sin(theta) + osc2 * np.cos(theta)])
+        lateral += np.interp(t_s, grid_t, amp * np.sin(phase))
+
+    xy = base_xy + normal * lateral[:, None]
 
     # small sensor/quantization noise
     xy += rng.normal(0.0, 0.3, xy.shape)

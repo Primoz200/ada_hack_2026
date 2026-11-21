@@ -16,7 +16,7 @@ from levels import load_levels
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "tracer_synth.jsonl")
-    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "tracer_samples.png")
+    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "tracer_samples.jpg")
     args = ap.parse_args()
 
     levels = load_levels()
