@@ -15,7 +15,8 @@ import { Sparkline } from './Sparkline'
 import { EmptyState, ErrorState, StatusBadge, UnderlineTabs } from './ui'
 
 // status | name | trendlines (one column each; a third, for the computer-vision games, fits later) | arrow
-const ROW_GRID = 'grid grid-cols-[10.5rem_minmax(0,1fr)_auto_2rem] items-center gap-x-8'
+// on a phone: status, name and trendlines stack in one column, the arrow stays top right
+const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-x-8 gap-y-2 md:grid-cols-[10.5rem_minmax(0,1fr)_auto_2rem]'
 const TREND_W = 176
 
 const TABS: { id: TriageTab; label: string }[] = [
@@ -50,7 +51,7 @@ export function TriagePage() {
       <PageTitle title="Pregled pacientov" />
       <Panel className="p-0 md:p-0" aria-busy={loading || undefined}>
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2 border-b border-border px-8 pt-6 md:px-10">
-          <p data-testid="counter-line" className="text-lg leading-[2.75rem]">
+          <p data-testid="counter-line" className="pt-1 text-lg leading-snug md:pt-0 md:leading-[2.75rem]">
             <Count n={c.needsAttention} /> za pregled
             <Dot />
             <Count n={c.noData} /> brez podatkov
@@ -97,13 +98,13 @@ function PatientRow({ p, today }: { p: PatientListItem; today: string }) {
       <Link
         to={paths.clinicianPatient(p.id)}
         data-testid={`patient-row-${p.id}`}
-        className={`${ROW_GRID} group min-h-20 px-8 py-4 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none md:px-10`}
+        className={`${ROW_GRID} group min-h-20 px-8 py-3 transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/45 focus-visible:ring-inset md:px-10`}
       >
-        <div>
+        <div className="col-start-1 md:col-start-auto">
           <StatusBadge status={p.status} />
         </div>
-        <div className="min-w-0 truncate text-lg font-semibold">{p.name}</div>
-        <div className="flex items-center gap-8">
+        <div className="col-start-1 min-w-0 truncate text-lg font-semibold md:col-start-auto">{p.name}</div>
+        <div className="col-start-1 flex flex-wrap items-center gap-x-8 gap-y-3 md:col-start-auto">
           <Sparkline
             caption="Sledenje"
             description={`${p.name}: rezultati sledenja zadnjih 21 dni glede na lastno izhodišče`}
@@ -123,7 +124,11 @@ function PatientRow({ p, today }: { p: PatientListItem; today: string }) {
             width={TREND_W}
           />
         </div>
-        <ArrowRight className="size-5 justify-self-end text-primary transition-transform group-hover:translate-x-0.5" strokeWidth={2} aria-hidden />
+        <ArrowRight
+          className="col-start-2 row-start-1 size-5 justify-self-end text-primary transition-transform group-hover:translate-x-0.5 md:col-start-auto md:row-start-auto"
+          strokeWidth={2}
+          aria-hidden
+        />
       </Link>
     </li>
   )
@@ -147,7 +152,7 @@ function ListSkeleton() {
         </div>
         <div>
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className={`${ROW_GRID} min-h-20 border-b border-border px-8 py-4 last:border-b-0 md:px-10`}>
+            <div key={i} className={`${ROW_GRID} min-h-20 border-b border-border px-8 py-3 last:border-b-0 md:px-10`}>
               <Skeleton className="h-8 w-28" />
               <Skeleton className="h-6 w-48" />
               <div className="flex gap-8">

@@ -36,7 +36,7 @@ export function SymptomPanel({ timeline, questions, domain }: Props) {
                   1–10, {scaleHint(q)}
                 </span>
               </div>
-              <ComposedChart width={width} height={last ? 118 : 92} data={points} margin={CHART_MARGIN}>
+              <ComposedChart width={width} height={last ? 118 : 98} data={points} margin={last ? CHART_MARGIN : { ...CHART_MARGIN, bottom: 8 }}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
                 <XAxis
                   dataKey="t"

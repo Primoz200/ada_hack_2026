@@ -85,13 +85,14 @@ export function UnderlineTabs<T extends string>({
   label: string
 }) {
   return (
-    <Tabs value={value} onValueChange={(v) => onChange(v as T)}>
+    // scrolls sideways on a phone instead of pushing the page wider
+    <Tabs value={value} onValueChange={(v) => onChange(v as T)} className="max-w-full overflow-x-auto">
       <TabsList variant="line" aria-label={label} className="h-11 gap-6 p-0 group-data-horizontal/tabs:h-11">
         {items.map((t) => (
           <TabsTrigger
             key={t.id}
             value={t.id}
-            className="h-11 flex-none px-0 text-base text-muted-foreground after:bottom-[-1px]! data-active:text-foreground data-active:after:bg-primary"
+            className="h-11 flex-none px-0 text-base text-muted-foreground after:bottom-0! data-active:text-foreground data-active:after:bg-primary"
           >
             {t.label}
             {t.count != null && <span className="tabular font-normal text-muted-foreground">{t.count}</span>}
@@ -99,15 +100,5 @@ export function UnderlineTabs<T extends string>({
         ))}
       </TabsList>
     </Tabs>
-  )
-}
-
-/** A small labelled value: label above in meta size, value below. */
-export function Labelled({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
-  return (
-    <div className={cn('min-w-0', className)}>
-      <div className="text-[0.9375rem] font-medium text-muted-foreground">{label}</div>
-      <div className="mt-0.5">{children}</div>
-    </div>
   )
 }

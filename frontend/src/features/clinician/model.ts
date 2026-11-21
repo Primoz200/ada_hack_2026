@@ -73,15 +73,6 @@ export function defaultTab(patients: PatientListItem[]): TriageTab {
   return filterPatients(patients, 'attention').length > 0 ? 'attention' : 'all'
 }
 
-export function counterLine(c: { needsAttention: number; noData: number; stable: number }): string {
-  const parts = [
-    `${c.needsAttention} za pregled`,
-    `${c.noData} brez podatkov`,
-    `${c.stable} ${plural(c.stable, 'stabilen', 'stabilna', 'stabilni', 'stabilnih')}`,
-  ]
-  return parts.join(' · ')
-}
-
 export function nextVisitText(daysTo: number | null | undefined): string {
   if (daysTo == null) return 'ni načrtovanega pregleda'
   if (daysTo === 0) return 'naslednji pregled danes'
@@ -100,7 +91,7 @@ export function visitWhen(daysTo: number | null | undefined): string {
 
 /** Fixed windows, so a decline looks like a decline in every row (no auto-zoom). */
 export const SPARK_DAYS = 21
-export const GAME_SPARK_DOMAIN: [number, number] = [-20, 10]
+export const GAME_SPARK_DOMAIN: [number, number] = [-20, 6]
 export const RATING_DOMAIN: [number, number] = [1, 10]
 
 export interface SparkRow {

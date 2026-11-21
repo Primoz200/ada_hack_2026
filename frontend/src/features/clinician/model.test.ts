@@ -8,7 +8,6 @@ import {
   chartMarkers,
   checkinRows,
   combinedRows,
-  counterLine,
   defaultTab,
   deltaWords,
   featureComparison,
@@ -139,8 +138,7 @@ describe('triage list', () => {
     expect(defaultTab(ps)).toBe('attention')
     expect(defaultTab([mk('b', 'stable')])).toBe('all')
   })
-  it('formats the counter line and next visit', () => {
-    expect(counterLine({ needsAttention: 2, noData: 1, stable: 7 })).toBe('2 za pregled · 1 brez podatkov · 7 stabilnih')
+  it('formats the next visit', () => {
     expect(nextVisitText(null)).toBe('ni načrtovanega pregleda')
     expect(nextVisitText(14)).toBe('naslednji pregled čez 14 dni')
     expect(nextVisitText(1)).toBe('naslednji pregled čez 1 dan')

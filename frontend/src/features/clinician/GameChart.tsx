@@ -21,6 +21,9 @@ import { AXIS_LABEL_STYLE, AXIS_TICK, CHART_MARGIN, Y_AXIS_WIDTH, markerStyle, s
 
 export type View = 'all' | 1 | 2 | 3
 
+// a card-coloured halo behind chart labels, so they stay readable where they cross a line or dots
+const HALO = { stroke: 'var(--card)', strokeWidth: 4, paintOrder: 'stroke' as const, strokeLinejoin: 'round' as const }
+
 // "območje rezultata": descriptive regions on the 0-100 axis (never "razred okvare")
 const REGIONS = [
   { y1: 85, y2: 100, label: 'običajno območje' },
@@ -101,7 +104,7 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
                 y={r.y1}
                 stroke="none"
                 ifOverflow="hidden"
-                label={{ value: r.label, position: 'insideBottomRight', fontSize: 13, fill: 'var(--muted-foreground)', dy: -2 }}
+                label={{ value: r.label, position: 'insideBottomRight', fontSize: 13, fill: 'var(--muted-foreground)', dy: -2, ...HALO }}
               />
             ))}
 
@@ -113,7 +116,7 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
               fillOpacity={0.09}
               stroke="none"
               ifOverflow="hidden"
-              label={{ value: 'pas izhodišča', position: 'insideTopLeft', fontSize: 13, fill: 'var(--primary)', dx: 4 }}
+              label={{ value: 'pas izhodišča', position: 'insideTopLeft', fontSize: 13, fill: 'var(--primary)', dx: 4, ...HALO }}
             />
           )}
           {isAll && (
@@ -123,7 +126,7 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
                 y={ALERT_THRESHOLD}
                 stroke="var(--status-amber)"
                 strokeDasharray="6 4"
-                label={{ value: 'prag opozorila: 10 točk pod izhodiščem', position: 'insideBottomLeft', fontSize: 13, fill: 'var(--status-amber)', dx: 4, dy: 18 }}
+                label={{ value: 'prag opozorila: 10 točk pod izhodiščem', position: 'insideBottomLeft', fontSize: 13, fill: 'var(--status-amber)', dx: 4, dy: 18, ...HALO }}
               />
             </>
           )}
@@ -138,7 +141,7 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
                 strokeDasharray={st.dash}
                 strokeWidth={1.25}
                 strokeOpacity={m.kind === 'alert' ? 0.75 : 1}
-                label={{ value: m.label, position: 'top', fontSize: 13, fill: st.stroke }}
+                label={{ value: m.label, position: 'top', fontSize: 13, fill: st.stroke, ...HALO }}
               />
             )
           })}
