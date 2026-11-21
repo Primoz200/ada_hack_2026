@@ -54,7 +54,6 @@
           "acknowledgedAt": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
@@ -77,7 +76,6 @@
           "closedAt": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
@@ -98,7 +96,6 @@
             "title": "Closedby"
           },
           "createdAt": {
-            "format": "date-time",
             "title": "Createdat",
             "type": "string"
           },
@@ -194,7 +191,6 @@
             "type": "string"
           },
           "updatedAt": {
-            "format": "date-time",
             "title": "Updatedat",
             "type": "string"
           }
@@ -316,7 +312,6 @@
             "title": "Concerntext"
           },
           "createdAt": {
-            "format": "date-time",
             "title": "Createdat",
             "type": "string"
           },
@@ -502,7 +497,6 @@
             "title": "Author"
           },
           "createdAt": {
-            "format": "date-time",
             "title": "Createdat",
             "type": "string"
           },
@@ -979,7 +973,6 @@
           "clinicianReviewedAt": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
@@ -1464,7 +1457,6 @@
             "title": "Score"
           },
           "startedAt": {
-            "format": "date-time",
             "title": "Startedat",
             "type": "string"
           }
@@ -1652,7 +1644,6 @@
           "clinicianReviewedAt": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {

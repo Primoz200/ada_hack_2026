@@ -287,10 +287,7 @@ export interface components {
             closedAt?: string | null;
             /** Closedby */
             closedBy?: string | null;
-            /**
-             * Createdat
-             * Format: date-time
-             */
+            /** Createdat */
             createdAt: string;
             /** Diverging */
             diverging: boolean;
@@ -332,10 +329,7 @@ export interface components {
              * @enum {string}
              */
             status: "new" | "acknowledged" | "closed";
-            /**
-             * Updatedat
-             * Format: date-time
-             */
+            /** Updatedat */
             updatedAt: string;
         };
         /** CheckinIn */
@@ -387,10 +381,7 @@ export interface components {
             concern: "none" | "little" | "call";
             /** Concerntext */
             concernText: string | null;
-            /**
-             * Createdat
-             * Format: date-time
-             */
+            /** Createdat */
             createdAt: string;
             /**
              * Day
@@ -467,10 +458,7 @@ export interface components {
         MessageOut: {
             /** Author */
             author?: string | null;
-            /**
-             * Createdat
-             * Format: date-time
-             */
+            /** Createdat */
             createdAt: string;
             /**
              * Direction
@@ -842,10 +830,7 @@ export interface components {
             modelVersion: string | null;
             /** Score */
             score: number | null;
-            /**
-             * Startedat
-             * Format: date-time
-             */
+            /** Startedat */
             startedAt: string;
         };
         /** SimulateIn */

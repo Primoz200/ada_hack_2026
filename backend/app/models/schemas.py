@@ -4,11 +4,20 @@ This file IS the API contract: contracts/openapi.json and the TypeScript types a
 generated from it. Shared hot file: only the orchestrator / Matevž edits it.
 JSON is camelCase (matches GameResult in plan section 5).
 """
-from datetime import date, datetime
-from typing import Any, Literal, Optional
+from datetime import date, datetime, timezone
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
 from pydantic.alias_generators import to_camel
+
+
+def _utc_iso(d: datetime) -> str:
+    # SQLite aggregates (e.g. max()) return naive datetimes; everything stored is UTC.
+    d = d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    return d.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+UtcDatetime = Annotated[datetime, PlainSerializer(_utc_iso, return_type=str, when_used="json")]
 
 
 class ApiModel(BaseModel):
@@ -89,12 +98,12 @@ class AlertOut(ApiModel):
     evidence: dict[str, Any]
     diverging: bool
     opened_day: date
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
     acknowledged_by: Optional[str] = None
-    acknowledged_at: Optional[datetime] = None
+    acknowledged_at: Optional[UtcDatetime] = None
     closed_by: Optional[str] = None
-    closed_at: Optional[datetime] = None
+    closed_at: Optional[UtcDatetime] = None
     outcome: Optional[Outcome] = None
     note: Optional[str] = None
 
@@ -115,7 +124,7 @@ class MessageOut(ApiModel):
     direction: Literal["to_patient", "system"]
     author: Optional[str] = None
     text: str
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class MessageIn(ApiModel):
@@ -198,7 +207,7 @@ class SessionSummary(ApiModel):
     level: int
     hand: Hand
     day: date
-    started_at: datetime
+    started_at: UtcDatetime
     duration_ms: int
     completed: bool
     abort_reason: Optional[str]
@@ -214,7 +223,7 @@ class CheckinOut(ApiModel):
     id: int
     patient_id: str
     day: date
-    created_at: datetime
+    created_at: UtcDatetime
     warning_signs: list[str]
     answers: dict[str, float]
     concern: Concern
@@ -267,7 +276,7 @@ class TodayOut(ApiModel):
     week_done: int  # days with any entry in the last 7
     last_message: Optional[MessageOut]
     reminder: Optional[str]  # automatic reminder after 2 missed days
-    clinician_reviewed_at: Optional[datetime]
+    clinician_reviewed_at: Optional[UtcDatetime]
 
 
 class ProgressPoint(ApiModel):
@@ -282,7 +291,7 @@ class ProgressOut(ApiModel):
     personal_best_day: Optional[date]
     week_done: int
     week_goal: int  # 5 of 7
-    clinician_reviewed_at: Optional[datetime]
+    clinician_reviewed_at: Optional[UtcDatetime]
 
 
 # ---------------------------------------------------------------- check-ins
@@ -325,7 +334,7 @@ class SessionIn(ApiModel):
     game_type: GameType
     level: int
     hand: Hand
-    started_at: datetime
+    started_at: UtcDatetime
     duration_ms: int = Field(ge=0)
     completed: bool
     abort_reason: Optional[str] = None
