@@ -26,7 +26,7 @@ def level_features(level: int, score: float, rng: random.Random) -> dict[str, fl
     duration_ms = BASE_DURATION_MS[level] * (1.0 + 1.1 * sev) * (1.0 + rng.gauss(0, 0.04))
     duration_ms = min(duration_ms, TIME_LIMIT_MS[level] * 0.95)
     return {
-        "mean_dev": round(max(0.002, 0.006 + 0.06 * sev + rng.gauss(0, 0.0015)), 4),
+        "mean_dev": round(max(0.002, 0.004 + 0.11 * sev * sev + rng.gauss(0, 0.0015)), 4),  # convex: a poor trace is visibly worse
         "duration_s": round(duration_ms / 1000.0, 2),
         "pause_rate_hz": round(max(0.0, 0.05 + 1.2 * sev + rng.gauss(0, 0.05)), 3),
         "lifts": float(int(sev * 6 * (0.4 + rng.random()))),

@@ -37,6 +37,7 @@ def open_alert(db: Session, patient_id: str) -> Optional[Alert]:
 BASELINE_NEEDED = 4  # practice session + baseline sessions (see trend.py)
 IMPROVING_REASON = "Rezultati so nad izhodiščem."
 STABLE_REASON = "Brez posebnosti; rezultati so blizu izhodišča."
+DECLINING_HANDLED_REASON = "Rezultati so pod izhodiščem; opozorila trenutno ni odprtega."
 URGENCY = {"red": 0, "yellow": 1, "no_data": 2, "insufficient_data": 3, "stable": 4}
 
 
@@ -82,6 +83,8 @@ def patient_state(db: Session, p: Patient, today: date) -> PatientState:
     if alert is not None and alert.severity in ("red", "yellow", "grey"):
         status = "no_data" if alert.severity == "grey" else alert.severity
         reason = alert.reason
+        if alert.severity == "grey":  # the stored sentence is frozen at opening; count up to today
+            reason = f"Brez vnosa že {(today - (last or p.discharge_date)).days} dni."
         diverging = alert.diverging
     else:
         diverging = divergence.assess(db, p.id, today)[0]
@@ -97,6 +100,9 @@ def patient_state(db: Session, p: Patient, today: date) -> PatientState:
             reason = f"Premalo sej za izhodišče ({n} od {BASELINE_NEEDED})."
         elif direction == "improving":
             status, reason = "stable", IMPROVING_REASON
+        elif direction == "declining":
+            # no open alert although the trend is below baseline: a clinician already handled it
+            status, reason = "stable", DECLINING_HANDLED_REASON
         else:
             status, reason = "stable", STABLE_REASON
     return PatientState(status, reason, diverging, alert, last, max(s_days, default=None),

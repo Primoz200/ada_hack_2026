@@ -73,3 +73,21 @@
 - Python pripet na 3.12 z `uv` (sistemski je 3.15). SQLModel 0.0.50 zahteva časovne žige s časovnim pasom (UTC).
 - `openapi-typescript` zahteva TypeScript 5, aplikacija uporablja 7, zato se generator zažene zunaj projekta z `npx -p typescript@5`.
 - Kamera na telefonu: Vite teče s samopodpisanim HTTPS (`@vitejs/plugin-basic-ssl`), `/api` gre prek proxyja.
+
+## 2026-11-21 (19.45) — Platforma zgrajena z agenti in integrirana (branch `matevz/platform`)
+
+**Narejeno:** pet Sonnet agentov v worktreejih (pisalna pot, bralna pot, pacientov vmesnik + igra sledenja, zdravnikov vmesnik, seed + simulacija), vse združeno. Jedro iz poglavja 2 + »Simuliraj naslednjih 7 dni« deluje.
+- Backend: točkovalnik z adapterjem za Primožev model (`models.tracer.score.score_session`, sicer nadomestni), trend (izhodišče = mediana sej 2–4, EWMA 0,3, skupni trend), opozorila (rdeča / rumena / siva, eno odprto na pacienta, zaprtje samo z izidom), 10 determinističnih pacientov, ponastavitev in simulacija. 96 testov.
+- Frontend: Danes, dnevni vnos, igra sledenja (prst ali miška), Moj napredek; zdravnikov seznam za triažo in pogled pacienta z grafi, predvajanjem seje in zaprtjem opozorila. 30 testov.
+- `DEMO.md`: zagon, telefon, kontrole za demo.
+
+**Preverjeno v brskalniku (headless Chrome):** igra z miško od začetka do rezultata, zaprtje opozorila z izidom, seznam in pogled pacienta 3 s pravimi podatki; simulacija 7 dni pri demo pacientu sproži rumeno opozorilo.
+**Ni preverjeno:** dotik na pravem telefonu prek HTTPS.
+
+**Ključno naučeno:**
+- Agentovi worktreeji so nastali iz starejšega commita; vsak agent je moral najprej narediti fast-forward na `matevz/platform`. V navodilih agentu to zahtevaj izrecno.
+- React StrictMode v razvoju komponento priklopi dvakrat; platno igre je ostalo prazno, ker se ID animacijskega okvira ob odklopu ni ponastavil.
+- Baza se ob vsakem zagonu backenda ponastavi (`APP_KEEP_DB=1` jo ohrani); »danes« po simulaciji živi samo v pomnilniku.
+- Telefonska številka ambulante v pacientovem delu je nadomestna (`features/patient/shared.tsx`).
+
+**Odprto:** preizkus na telefonu; Primožev model (vmesnik v `scoring.py`); igra s kamero in ostali dodatki iz poglavja 2 niso narejeni.
