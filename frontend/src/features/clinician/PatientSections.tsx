@@ -1,83 +1,69 @@
 // Smaller sections of the patient page: check-in history, action log, model info.
-import { Info, Send, ShieldCheck, ShieldQuestion, Siren, UserCheck } from 'lucide-react'
-import type { Alert, Checkin, Message, Meta, Pathway } from '@/client/api'
+import { Info, ShieldCheck, Siren, UserCheck } from 'lucide-react'
+import type { Alert, Checkin, Meta, Pathway } from '@/client/api'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ANSWERED_BY_LABEL, CONCERN_LABEL, assembleActionLog, dayMs, formatAnswer, formatDateTime, formatDay, questionLabel } from './model'
+import { assembleActionLog, checkinRows, formatDateTime, formatDay, ratingQuestions } from './model'
 
+/** Date, wellbeing and pain. Nothing else is asked any more. */
 export function CheckinHistory({ checkins, pathway }: { checkins: Checkin[]; pathway: Pathway }) {
-  const rows = [...checkins].sort((a, b) => dayMs(b.day) - dayMs(a.day) || b.id - a.id).slice(0, 14)
-  if (rows.length === 0) return <p className="py-4 text-sm text-muted-foreground">Pacient še nima dnevnih vnosov.</p>
-  const signText = (id: string) => pathway.warningSigns.find((w) => w.id === id)?.text ?? id
+  const rows = checkinRows(checkins)
+  const [wq, pq] = ratingQuestions(pathway.questions)
+  if (rows.length === 0) return <p className="py-2 text-[0.9375rem] text-muted-foreground">Pacient še ni ocenil počutja in bolečine.</p>
   return (
-    <Table data-testid="checkin-history">
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-24">Datum</TableHead>
-          <TableHead>Odgovori</TableHead>
-          <TableHead className="w-56">Opozorilni znaki</TableHead>
-          <TableHead className="w-72">Skrb pacienta</TableHead>
-          <TableHead className="w-24">Odgovarjal</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <table className="w-full text-base" data-testid="checkin-history">
+      <thead>
+        <tr className="border-b border-border text-left text-[0.9375rem] text-muted-foreground">
+          <th className="pb-2 font-medium">Datum</th>
+          <th className="pb-2 text-right font-medium">{wq.shortLabel}</th>
+          <th className="pb-2 text-right font-medium">{pq.shortLabel}</th>
+        </tr>
+      </thead>
+      <tbody>
         {rows.map((c) => (
-          <TableRow key={c.id} className="align-top">
-            <TableCell className="font-medium">{formatDay(c.day)}</TableCell>
-            <TableCell className="whitespace-normal">
-              <ul className="space-y-0.5">
-                {pathway.questions
-                  .filter((q) => q.id in c.answers)
-                  .map((q) => (
-                    <li key={q.id}>
-                      <span className="text-muted-foreground">{questionLabel(q)}:</span> {formatAnswer(q, c.answers[q.id])}
-                    </li>
-                  ))}
-              </ul>
-            </TableCell>
-            <TableCell className="whitespace-normal">
-              {c.warningSigns.length === 0 ? (
-                <span className="text-muted-foreground">brez</span>
-              ) : (
-                <span className="font-medium text-red-800">{c.warningSigns.map(signText).join(', ')}</span>
-              )}
-            </TableCell>
-            <TableCell className="whitespace-normal">
-              {c.concern === 'none' && !c.concernText ? (
-                <span className="text-muted-foreground">ne</span>
-              ) : (
-                <>
-                  <span className="font-medium">{CONCERN_LABEL[c.concern]}</span>
-                  {c.concernText && <span className="block text-muted-foreground">»{c.concernText}«</span>}
-                </>
-              )}
-            </TableCell>
-            <TableCell>{ANSWERED_BY_LABEL[c.answeredBy] ?? c.answeredBy}</TableCell>
-          </TableRow>
+          <tr key={c.id} className="border-b border-border last:border-b-0">
+            <td className="tabular py-1.5">{formatDay(c.day)}</td>
+            <td className="tabular py-1.5 text-right">
+              <Rating value={c.answers[wq.id]} max={wq.max} />
+            </td>
+            <td className="tabular py-1.5 text-right">
+              <Rating value={c.answers[pq.id]} max={pq.max} />
+            </td>
+          </tr>
         ))}
-      </TableBody>
-    </Table>
+      </tbody>
+    </table>
   )
 }
 
-const LOG_ICON = { opened: Siren, acknowledged: UserCheck, closed: ShieldCheck, message: Send }
-
-export function ActionLog({ alerts, messages, meta }: { alerts: Alert[]; messages: Message[]; meta: Meta | undefined }) {
-  const names = Object.fromEntries((meta?.clinicians ?? []).map((c) => [c.id, c.name]))
-  const log = assembleActionLog(alerts, messages, meta?.outcomes ?? {}, names)
-  if (log.length === 0) return <p className="py-4 text-sm text-muted-foreground">Za tega pacienta še ni zabeleženih ukrepov.</p>
+function Rating({ value, max }: { value: number | undefined; max: number }) {
+  if (value == null) return <span className="text-muted-foreground">ni ocene</span>
   return (
-    <ol className="space-y-3" data-testid="action-log">
+    <>
+      <span className="font-semibold">{value.toLocaleString('sl-SI', { maximumFractionDigits: 1 })}</span>
+      <span className="text-muted-foreground"> od {max}</span>
+    </>
+  )
+}
+
+const LOG_ICON = { opened: Siren, acknowledged: UserCheck, closed: ShieldCheck }
+
+export function ActionLog({ alerts, meta }: { alerts: Alert[]; meta: Meta | undefined }) {
+  const names = Object.fromEntries((meta?.clinicians ?? []).map((c) => [c.id, c.name]))
+  const log = assembleActionLog(alerts, meta?.outcomes ?? {}, names)
+  if (log.length === 0)
+    return <p className="py-2 text-[0.9375rem] text-muted-foreground">Za tega pacienta še ni bilo opozoril, zato tudi ni zabeleženih ukrepov.</p>
+  return (
+    <ol data-testid="action-log">
       {log.map((e, i) => {
         const Icon = LOG_ICON[e.kind]
         return (
-          <li key={i} className="flex gap-3 text-sm">
-            <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <li key={i} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3 border-b border-border py-3 first:pt-0 last:border-b-0">
+            <Icon className="mt-0.5 size-[1.125rem] text-primary" strokeWidth={1.75} aria-hidden />
             <div>
-              <div>{e.text}</div>
-              {e.detail && <div className="text-muted-foreground">{e.kind === 'closed' ? `Opomba: ${e.detail}` : `»${e.detail}«`}</div>}
-              <div className="text-xs text-muted-foreground">{formatDateTime(e.at)}</div>
+              <div className="font-medium">{e.text}</div>
+              {e.detail && <div className="text-[0.9375rem] text-muted-foreground">{e.kind === 'closed' ? `Opomba: ${e.detail}` : e.detail}</div>}
+              <div className="tabular mt-0.5 text-[0.875rem] text-muted-foreground">{formatDateTime(e.at)}</div>
             </div>
           </li>
         )
@@ -88,27 +74,26 @@ export function ActionLog({ alerts, messages, meta }: { alerts: Alert[]; message
 
 export function ModelNote({ meta }: { meta: Meta | undefined }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground" data-testid="model-note">
-      <ShieldQuestion className="size-4 shrink-0" aria-hidden />
-      <span>Podpora odločanju brez klinične validacije; primerja pacienta z njegovimi prejšnjimi sejami.</span>
+    <div className="flex items-center gap-2 text-[0.9375rem] text-muted-foreground" data-testid="model-note">
+      <span>Podpora odločanju brez klinične validacije: pacienta primerja z njegovimi prejšnjimi sejami, ne postavlja diagnoz.</span>
       <Dialog>
         <DialogTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="O modelu">
+          <Button variant="ghost" size="icon-sm" className="text-primary hover:bg-accent hover:text-primary" aria-label="O modelu">
             <Info />
           </Button>
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>O modelu</DialogTitle>
-            <DialogDescription>Kratko o tem, kaj ocena pomeni in česa ne.</DialogDescription>
+            <DialogTitle className="text-xl font-bold">O modelu</DialogTitle>
+            <DialogDescription>Kaj ocena pomeni in česa ne.</DialogDescription>
           </DialogHeader>
-          <ul className="list-disc space-y-1.5 pl-5 text-sm">
+          <ul className="list-disc space-y-2 pl-5 text-[0.9375rem]">
             <li>Model oceni posamezen test sledenja (0–100) iz sledi prsta ali miške. Pacienta in njegove zgodovine ne pozna.</li>
             <li>Trend je pravilo brez modela: primerja glajene ocene z izhodiščem pacienta (mediana sej 2–4; prva seja je vaja).</li>
             <li>Model je učen na sintetičnih podatkih. Pragovi opozoril so inženirska izbira, ne klinično validirani.</li>
             <li>Sistem kaže odstopanje od pacientovega lastnega izhodišča, ne postavlja diagnoz. Opozorilo vedno zapre zdravnik.</li>
           </ul>
-          <p className="text-xs text-muted-foreground">Različica modela: {meta?.modelVersion ?? 'neznana'}</p>
+          <p className="text-[0.875rem] text-muted-foreground">Različica modela: {meta?.modelVersion ?? 'neznana'}</p>
         </DialogContent>
       </Dialog>
     </div>

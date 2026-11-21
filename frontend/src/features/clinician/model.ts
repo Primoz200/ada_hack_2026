@@ -1,14 +1,5 @@
 // Pure data shaping for the clinician screens (no React, no fetching). Tested in model.test.ts.
-import type {
-  Alert,
-  Checkin,
-  Message,
-  PatientListItem,
-  Question,
-  SessionSummary,
-  Timeline,
-  TrendPoint,
-} from '@/client/api'
+import type { Alert, Checkin, PatientDetail, PatientListItem, Question, SessionSummary, Timeline, TrendPoint } from '@/client/api'
 
 export const DAY_MS = 86_400_000
 export const BAND = 5 // "pas izhodišča": ±5 points
@@ -29,6 +20,11 @@ export function formatDay(iso: string | number): string {
   return d.toLocaleDateString('sl-SI', { timeZone: 'UTC' })
 }
 
+/** "18. december" style, for prominent dates. */
+export function formatDayLong(iso: string): string {
+  return new Date(dayMs(iso)).toLocaleDateString('sl-SI', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('sl-SI', { dateStyle: 'short', timeStyle: 'short' })
 }
@@ -43,6 +39,16 @@ export function plural(n: number, one: string, two: string, few: string, other: 
   if (m === 2) return two
   if (m === 3 || m === 4) return few
   return other
+}
+
+const days = (n: number) => `${n} ${plural(n, 'dan', 'dneva', 'dni', 'dni')}`
+
+/** "1 točka", "2 točki", "3 točke", "11 točk"; decimals take "točke" ("2,5 točke"). */
+export function pointsText(value: number): string {
+  const r = Math.round(Math.abs(value) * 10) / 10
+  const n = r.toLocaleString('sl-SI', { maximumFractionDigits: 1 })
+  if (!Number.isInteger(r)) return `${n} točke`
+  return `${n} ${plural(r, 'točka', 'točki', 'točke', 'točk')}`
 }
 
 // ------------------------------------------------------------------ triage list
@@ -67,24 +73,51 @@ export function defaultTab(patients: PatientListItem[]): TriageTab {
   return filterPatients(patients, 'attention').length > 0 ? 'attention' : 'all'
 }
 
-export function counterLine(c: { needsAttention: number; noData: number; stable: number }): string {
-  const parts = [
-    `${c.needsAttention} za pregled`,
-    `${c.noData} brez podatkov`,
-    `${c.stable} ${plural(c.stable, 'stabilen', 'stabilna', 'stabilni', 'stabilnih')}`,
-  ]
-  return parts.join(' · ')
+export function nextVisitText(daysTo: number | null | undefined): string {
+  if (daysTo == null) return 'ni načrtovanega pregleda'
+  if (daysTo === 0) return 'naslednji pregled danes'
+  if (daysTo < 0) return `pregled je zamujen ${days(-daysTo)}`
+  return `naslednji pregled čez ${days(daysTo)}`
 }
 
-export function nextVisitText(days: number | null | undefined): string {
-  if (days == null) return 'ni načrtovanega pregleda'
-  if (days === 0) return 'naslednji pregled danes'
-  if (days < 0) return `pregled je zamujen ${-days} ${plural(-days, 'dan', 'dneva', 'dni', 'dni')}`
-  return `naslednji pregled čez ${days} ${plural(days, 'dan', 'dneva', 'dni', 'dni')}`
+/** Short form for the prominent next-visit figure: "čez 30 dni", "danes", "zamujen 2 dni". */
+export function visitWhen(daysTo: number | null | undefined): string {
+  if (daysTo == null) return 'ni načrtovan'
+  if (daysTo === 0) return 'danes'
+  if (daysTo === 1) return 'jutri'
+  if (daysTo < 0) return `zamujen ${days(-daysTo)}`
+  return `čez ${days(daysTo)}`
 }
 
-export function sparkRows(p: PatientListItem): { t: number; v: number | null }[] {
-  return p.sparkline.map((s) => ({ t: dayMs(s.day), v: s.value ?? null }))
+/** Fixed windows, so a decline looks like a decline in every row (no auto-zoom). */
+export const SPARK_DAYS = 21
+export const GAME_SPARK_DOMAIN: [number, number] = [-20, 6]
+export const RATING_DOMAIN: [number, number] = [1, 10]
+
+export interface SparkRow {
+  t: number
+  v: number | null
+}
+
+/**
+ * One row per day of the last SPARK_DAYS days ending `today`. Missing days are null so the line
+ * breaks (a patient who stopped sending visibly ends early). Values are clamped into `domain`.
+ */
+export function sparkRows(points: { day: string; value?: number | null }[], today: string, domain: [number, number]): SparkRow[] {
+  const end = dayMs(today)
+  const start = end - (SPARK_DAYS - 1) * DAY_MS
+  const byDay = new Map<number, number>()
+  for (const p of points) if (p.value != null) byDay.set(dayMs(p.day), p.value)
+  const rows: SparkRow[] = []
+  for (let t = start; t <= end; t += DAY_MS) {
+    const v = byDay.get(t)
+    rows.push({ t, v: v == null ? null : Math.min(domain[1], Math.max(domain[0], v)) })
+  }
+  return rows
+}
+
+export function sparkValueCount(rows: SparkRow[]): number {
+  return rows.filter((r) => r.v != null).length
 }
 
 // ------------------------------------------------------------------ trends
@@ -149,11 +182,11 @@ export function trendSummary(trends: TrendPoint[], metric: string): TrendSummary
   }
 }
 
-export function deltaWords(delta: number | null): string {
+/** A change vs the patient's own baseline, in words: "11 točk pod izhodiščem". */
+export function deltaWords(delta: number | null | undefined): string {
   if (delta == null) return 'ni izhodišča'
-  const r = Math.round(delta)
-  if (Math.abs(delta) < BAND) return `v pasu izhodišča (${r > 0 ? '+' : ''}${r} točk)`
-  return `${r > 0 ? '+' : '−'}${Math.abs(r)} točk ${r > 0 ? 'nad' : 'pod'} izhodiščem`
+  if (Math.abs(delta) < BAND) return 'v pasu izhodišča'
+  return `${pointsText(delta)} ${delta > 0 ? 'nad' : 'pod'} izhodiščem`
 }
 
 // ------------------------------------------------------------------ x axis and markers
@@ -170,7 +203,7 @@ export interface TimeDomain {
   end: number
 }
 
-/** Shared by the game chart and the symptom charts, so their x axes line up. */
+/** Shared by the game chart and the rating charts, so their x axes line up. */
 export function timeDomain(tl: Timeline): TimeDomain {
   const ts: number[] = []
   for (const s of tl.sessions) ts.push(dayMs(s.day))
@@ -197,8 +230,8 @@ export function chartMarkers(tl: Timeline, dom: TimeDomain): Marker[] {
 }
 
 export function dayTicks(dom: TimeDomain, maxTicks = 8): number[] {
-  const days = Math.round((dom.end - dom.start) / DAY_MS)
-  const step = Math.max(1, Math.ceil(days / maxTicks))
+  const n = Math.round((dom.end - dom.start) / DAY_MS)
+  const step = Math.max(1, Math.ceil(n / maxTicks))
   const ticks: number[] = []
   for (let t = dom.start; t <= dom.end; t += step * DAY_MS) ticks.push(t)
   return ticks
@@ -319,44 +352,61 @@ export function featureComparison(sessions: SessionSummary[], level: number | nu
     }
   }
   rows.sort((a, b) => Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0))
-  return { rows: rows.slice(0, top), nBaseline, nRecent }
+  // across all levels: each feature once (on the level where it moved most), so the list says three different things
+  const seen = new Set<string>()
+  const distinct = level == null ? rows.filter((r) => !seen.has(r.key) && seen.add(r.key)) : rows
+  return { rows: distinct.slice(0, top), nBaseline, nRecent }
 }
 
 export function formatFeature(v: number): string {
   const a = Math.abs(v)
+  // small values keep two significant digits, so 0.003 does not print as "0"
+  if (a > 0 && a < 0.1) return v.toLocaleString('sl-SI', { maximumSignificantDigits: 2 })
   return v.toLocaleString('sl-SI', { maximumFractionDigits: a >= 100 ? 0 : a >= 10 ? 1 : 2 })
 }
 
-// ------------------------------------------------------------------ symptoms
+export function formatPct(pct: number | null): string {
+  if (pct == null) return '–'
+  const r = Math.round(pct)
+  return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r)} %`
+}
 
-export const CONCERN_LABEL: Record<string, string> = { none: 'ne', little: 'malo', call: 'želi klic' }
-export const ANSWERED_BY_LABEL: Record<string, string> = { self: 'sam', assisted: 's pomočjo', relative: 'svojec' }
+// ------------------------------------------------------------------ ratings (wellbeing, pain)
 
-export interface SymptomSeries {
+export const RATING_IDS = ['wellbeing', 'pain'] as const
+export type RatingId = (typeof RATING_IDS)[number]
+
+const RATING_FALLBACK: Record<RatingId, Question> = {
+  wellbeing: { id: 'wellbeing', kind: 'scale', text: 'Kako se počutite danes?', shortLabel: 'Počutje', min: 1, max: 10, minLabel: 'zelo slabo', maxLabel: 'odlično', higherIsWorse: false },
+  pain: { id: 'pain', kind: 'scale', text: 'Kako močna je bolečina?', shortLabel: 'Bolečina', min: 1, max: 10, minLabel: 'brez bolečine', maxLabel: 'najhujša', higherIsWorse: true },
+}
+
+/** The two ratings in a fixed order, taken from the pathway when present. */
+export function ratingQuestions(questions: Question[]): Question[] {
+  return RATING_IDS.map((id) => questions.find((q) => q.id === id) ?? RATING_FALLBACK[id])
+}
+
+export interface RatingSeries {
   question: Question
   points: { t: number; day: string; value: number }[]
 }
 
-export function symptomSeries(questions: Question[], checkins: Checkin[]): SymptomSeries[] {
-  const sorted = [...checkins].sort((a, b) => dayMs(a.day) - dayMs(b.day))
-  return questions.map((q) => ({
+export function ratingSeries(questions: Question[], checkins: Checkin[]): RatingSeries[] {
+  const sorted = [...checkins].sort((a, b) => dayMs(a.day) - dayMs(b.day) || a.id - b.id)
+  return ratingQuestions(questions).map((q) => ({
     question: q,
-    points: sorted.filter((c) => q.id in c.answers).map((c) => ({ t: dayMs(c.day), day: c.day, value: c.answers[q.id] })),
+    points: sorted.filter((c) => typeof c.answers[q.id] === 'number').map((c) => ({ t: dayMs(c.day), day: c.day, value: c.answers[q.id] })),
   }))
 }
 
-export function concernPoints(checkins: Checkin[]): { t: number; day: string; concern: 'little' | 'call'; level: 1 | 2 }[] {
-  return checkins
-    .filter((c) => c.concern === 'little' || c.concern === 'call')
-    .map((c) => ({ t: dayMs(c.day), day: c.day, concern: c.concern as 'little' | 'call', level: (c.concern === 'call' ? 2 : 1) as 1 | 2 }))
-    .sort((a, b) => a.t - b.t)
+export function ratingText(value: number | undefined, max = 10): string {
+  if (value == null) return '–'
+  return `${value.toLocaleString('sl-SI', { maximumFractionDigits: 1 })} od ${max}`
 }
 
-export function warningDays(checkins: Checkin[]): { t: number; day: string; signs: string[] }[] {
-  return checkins
-    .filter((c) => c.warningSigns.length > 0)
-    .map((c) => ({ t: dayMs(c.day), day: c.day, signs: c.warningSigns }))
-    .sort((a, b) => a.t - b.t)
+/** "višje je bolje" / "višje je slabše", with the end labels when the pathway has them. */
+export function scaleHint(q: Question): string {
+  return q.higherIsWorse ? 'višje je slabše' : 'višje je bolje'
 }
 
 // ------------------------------------------------------------------ session replay
@@ -402,6 +452,17 @@ export function durationText(ms: number): string {
 
 // ------------------------------------------------------------------ alert evidence (defensive: evidence is free-form JSON)
 
+export const SEVERITY_LABEL: Record<string, string> = { red: 'Nujno', yellow: 'Za pregled', grey: 'Brez podatkov' }
+export const SEVERITY_STATUS: Record<string, Status> = { red: 'red', yellow: 'yellow', grey: 'no_data' }
+
+export const RULE_LABEL: Record<string, string> = {
+  trend_drop: 'Sledenje pod izhodiščem',
+  subjective_drop: 'Slabše počutje ali več bolečine',
+  both: 'Sledenje in počutje hkrati',
+  big_drop: 'Velik padec sledenja',
+  no_data: 'Ni novih podatkov',
+}
+
 export interface Trigger {
   rule: string
   severity: string
@@ -410,6 +471,7 @@ export interface Trigger {
 }
 
 const asStr = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null)
+const asNum = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
 export function alertTriggers(a: Pick<Alert, 'evidence'>): Trigger[] {
   const raw = a.evidence?.triggers
@@ -422,10 +484,7 @@ export function alertTriggers(a: Pick<Alert, 'evidence'>): Trigger[] {
       day: asStr(t.day),
       reason: asStr(t.reason) ?? '',
     }))
-}
-
-export function alertConcernText(a: Pick<Alert, 'evidence'>): string | null {
-  return asStr(a.evidence?.concernText)
+    .filter((t) => t.reason || t.rule)
 }
 
 export function alertDivergence(a: Pick<Alert, 'evidence'>): string | null {
@@ -435,70 +494,104 @@ export function alertDivergence(a: Pick<Alert, 'evidence'>): string | null {
   return null
 }
 
-export const SEVERITY_LABEL: Record<string, string> = { red: 'Nujno', yellow: 'Za pregled', grey: 'Brez podatkov' }
+export function evidenceNumber(a: Pick<Alert, 'evidence'>, key: string): number | null {
+  return asNum(a.evidence?.[key])
+}
+
+export interface Fact {
+  label: string
+  value: string
+  /** a quieter second line, e.g. the date */
+  detail?: string
+}
+
+function ratingChangeFact(kind: 'wellbeing' | 'pain', change: number): Fact | null {
+  if (Math.abs(change) < 0.05) return null
+  const up = change > 0
+  return {
+    label: kind === 'wellbeing' ? 'Počutje' : 'Bolečina',
+    value: `${pointsText(change)} ${up ? 'višje' : 'nižje'} kot teden prej`,
+  }
+}
+
+export function visitFact(p: Pick<PatientDetail, 'daysToNextVisit' | 'nextVisitDate'>): Fact {
+  return {
+    label: 'Naslednji pregled',
+    value: visitWhen(p.daysToNextVisit),
+    detail: p.nextVisitDate ? formatDay(p.nextVisitDate) : undefined,
+  }
+}
+
+/**
+ * At most two key facts for the alert box. The point is the contrast: how far the patient has
+ * moved from their own baseline, and how far away the next planned visit is.
+ */
+export function alertFacts(
+  a: Pick<Alert, 'evidence' | 'rule'>,
+  p: Pick<PatientDetail, 'daysToNextVisit' | 'nextVisitDate' | 'summary'>,
+  today: string,
+): Fact[] {
+  const facts: Fact[] = []
+  if (a.rule === 'subjective_drop') {
+    const w = evidenceNumber(a, 'wellbeingChange')
+    const pain = evidenceNumber(a, 'painChange')
+    // the bigger move, as "worse": wellbeing down or pain up
+    const wf = w != null && w < 0 ? ratingChangeFact('wellbeing', w) : null
+    const pf = pain != null && pain > 0 ? ratingChangeFact('pain', pain) : null
+    const pick = wf && pf ? (Math.abs(w!) >= Math.abs(pain!) ? wf : pf) : (wf ?? pf)
+    if (pick) facts.push(pick)
+  } else if (a.rule === 'no_data') {
+    const last = [p.summary.lastSessionDay, p.summary.lastCheckinDay].filter((d): d is string => !!d).sort().pop()
+    if (last) {
+      const ago = Math.round((dayMs(today) - dayMs(last)) / DAY_MS)
+      facts.push({ label: 'Zadnji samopregled', value: ago <= 0 ? 'danes' : `pred ${days(ago)}`, detail: formatDay(last) })
+    } else {
+      facts.push({ label: 'Zadnji samopregled', value: 'še nobenega' })
+    }
+  } else {
+    const delta = evidenceNumber(a, 'delta') ?? p.summary.combinedDelta
+    if (delta != null) facts.push({ label: 'Sledenje', value: deltaWords(delta) })
+  }
+  facts.push(visitFact(p))
+  return facts.slice(0, 2)
+}
 
 // ------------------------------------------------------------------ action log
 
 export interface LogEntry {
   at: string
-  kind: 'opened' | 'acknowledged' | 'closed' | 'message'
+  kind: 'opened' | 'acknowledged' | 'closed'
   text: string
   detail?: string
 }
 
-export function assembleActionLog(
-  alerts: Alert[],
-  messages: Message[],
-  outcomes: Record<string, string>,
-  clinicianNames: Record<string, string> = {},
-): LogEntry[] {
+export function assembleActionLog(alerts: Alert[], outcomes: Record<string, string>, clinicianNames: Record<string, string> = {}): LogEntry[] {
   const who = (id: string | null | undefined) => (id ? (clinicianNames[id] ?? id) : 'neznan')
   const out: LogEntry[] = []
   for (const a of alerts) {
     out.push({
       at: a.createdAt,
       kind: 'opened',
-      text: `Odprto opozorilo (${SEVERITY_LABEL[a.severity] ?? a.severity}): ${a.reason}`,
+      text: `Odprto opozorilo »${SEVERITY_LABEL[a.severity] ?? a.severity}«`,
+      detail: a.reason,
     })
     if (a.acknowledgedAt) {
-      out.push({ at: a.acknowledgedAt, kind: 'acknowledged', text: `Potrdil ${who(a.acknowledgedBy)}, da je videl opozorilo` })
+      out.push({ at: a.acknowledgedAt, kind: 'acknowledged', text: `${who(a.acknowledgedBy)} je potrdil, da je videl opozorilo` })
     }
     if (a.closedAt) {
       out.push({
         at: a.closedAt,
         kind: 'closed',
-        text: `Zaprl ${who(a.closedBy)} z izidom: ${a.outcome ? (outcomes[a.outcome] ?? a.outcome) : 'brez izida'}`,
+        text: `${who(a.closedBy)} je zaprl opozorilo z izidom »${a.outcome ? (outcomes[a.outcome] ?? a.outcome) : 'brez izida'}«`,
         detail: a.note ?? undefined,
       })
     }
-  }
-  for (const m of messages) {
-    out.push({
-      at: m.createdAt,
-      kind: 'message',
-      text: m.direction === 'to_patient' ? `Sporočilo pacientu${m.author ? ` (${who(m.author)})` : ''}` : 'Sistemsko sporočilo pacientu',
-      detail: m.text,
-    })
   }
   return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
 }
 
 // ------------------------------------------------------------------ check-in history
 
-export const QUESTION_SHORT: Record<string, string> = {
-  arm_function: 'Funkcija roke',
-  fatigue: 'Utrujenost',
-  fall: 'Padec',
-  pain: 'Bolečina',
-  tingling: 'Mravljinčenje',
-  night_wakings: 'Nočno zbujanje',
-}
-
-export function questionLabel(q: Pick<Question, 'id' | 'text'>): string {
-  return QUESTION_SHORT[q.id] ?? q.text
-}
-
-export function formatAnswer(q: Question, value: number): string {
-  if (q.kind === 'yes_no') return value >= 1 ? 'da' : 'ne'
-  return `${value}/${q.max}`
+export function checkinRows(checkins: Checkin[], limit = 14): Checkin[] {
+  return [...checkins].sort((a, b) => dayMs(b.day) - dayMs(a.day) || b.id - a.id).slice(0, limit)
 }

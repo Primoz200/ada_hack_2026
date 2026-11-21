@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { Alert, Checkin, Message, PatientListItem, Question, SessionSummary, Timeline, TrendPoint } from '@/client/api'
+import type { Alert, Checkin, PatientListItem, Question, SessionSummary, Timeline, TrendPoint } from '@/client/api'
 import {
-  alertConcernText,
   alertDivergence,
+  alertFacts,
   alertTriggers,
   assembleActionLog,
   chartMarkers,
+  checkinRows,
   combinedRows,
-  concernPoints,
-  counterLine,
   defaultTab,
   deltaWords,
   featureComparison,
@@ -16,12 +15,16 @@ import {
   levelRows,
   nextVisitText,
   pickBaselineSession,
+  pointsText,
+  ratingSeries,
+  sparkRows,
   splitStrokes,
-  symptomSeries,
   timeDomain,
   trendSummary,
-  warningDays,
+  visitWhen,
   dayMs,
+  GAME_SPARK_DOMAIN,
+  SPARK_DAYS,
 } from './model'
 
 // A declining stroke patient with an open yellow alert (patient 3 story): 5 weeks, level 1 only for brevity.
@@ -77,11 +80,7 @@ const checkins: Checkin[] = [0, 1, 2, 3].map((i) => ({
   patientId: 'p3',
   day: iso(i * 5),
   createdAt: `${iso(i * 5)}T08:00:00Z`,
-  warningSigns: i === 2 ? ['limb'] : [],
-  answers: { arm_function: 4, fatigue: i },
-  concern: i === 3 ? 'little' : 'none',
-  concernText: i === 3 ? 'Roka mi je danes težja.' : null,
-  answeredBy: 'self',
+  answers: (i === 3 ? { wellbeing: 5 } : { wellbeing: 8 - i, pain: 2 + i }) as Record<string, number>,
 }))
 
 const alert: Alert = {
@@ -89,13 +88,13 @@ const alert: Alert = {
   patientId: 'p3',
   patientName: 'Marko Zupan',
   source: 'game',
-  rule: 'combined_drop',
+  rule: 'trend_drop',
   severity: 'yellow',
   status: 'new',
   reason: 'Rezultati igre so 12 točk pod izhodiščem.',
   evidence: {
-    triggers: [{ rule: 'combined_drop', severity: 'yellow', day: iso(27), reason: '2 od zadnjih 3 dni pod −10' }, 'junk', { reason: 5 }],
-    concernText: 'Roka mi je danes težja.',
+    triggers: [{ rule: 'trend_drop', severity: 'yellow', day: iso(27), reason: 'Sledenje je že 5 dni pod izhodiščem.' }, 'junk', { reason: 5 }],
+    delta: -11.4,
     divergence: 'Rezultati igre padajo, pacient pa poroča enako ali boljše počutje.',
   },
   diverging: true,
@@ -119,18 +118,17 @@ const timeline: Timeline = {
   checkins,
   trends,
   alerts: [alert],
-  messages: [],
 }
 
 const questions: Question[] = [
-  { id: 'arm_function', kind: 'faces5', text: 'Roka', min: 1, max: 5, minLabel: null, maxLabel: null, higherIsWorse: false },
-  { id: 'fatigue', kind: 'scale', text: 'Utrujenost', min: 0, max: 4, minLabel: null, maxLabel: null, higherIsWorse: true },
+  { id: 'pain', kind: 'scale', text: 'Bolečina?', shortLabel: 'Bolečina', min: 1, max: 10, higherIsWorse: true },
+  { id: 'wellbeing', kind: 'scale', text: 'Počutje?', shortLabel: 'Počutje', min: 1, max: 10, higherIsWorse: false },
 ]
 
 describe('triage list', () => {
   const mk = (id: string, status: PatientListItem['status']): PatientListItem => ({
     id, name: id, pathwayCode: 'stroke', pathwayName: 'Kap', side: 'right', daysSinceDischarge: 10, status,
-    reason: '', diverging: false, sparkline: [], checkins7d: 3, daysToNextVisit: null, openAlertId: null, isDemo: false,
+    reason: '', diverging: false, gameSparkline: [], wellbeingSparkline: [], daysToNextVisit: null, openAlertId: null, isDemo: false,
   })
   it('filters tabs and picks the default', () => {
     const ps = [mk('a', 'yellow'), mk('b', 'stable'), mk('c', 'no_data'), mk('d', 'red')]
@@ -140,11 +138,29 @@ describe('triage list', () => {
     expect(defaultTab(ps)).toBe('attention')
     expect(defaultTab([mk('b', 'stable')])).toBe('all')
   })
-  it('formats the counter line and next visit', () => {
-    expect(counterLine({ needsAttention: 2, noData: 1, stable: 7 })).toBe('2 za pregled · 1 brez podatkov · 7 stabilnih')
+  it('formats the next visit', () => {
     expect(nextVisitText(null)).toBe('ni načrtovanega pregleda')
     expect(nextVisitText(14)).toBe('naslednji pregled čez 14 dni')
     expect(nextVisitText(1)).toBe('naslednji pregled čez 1 dan')
+    expect(visitWhen(30)).toBe('čez 30 dni')
+    expect(visitWhen(null)).toBe('ni načrtovan')
+    expect(visitWhen(-2)).toBe('zamujen 2 dneva')
+  })
+  it('builds fixed-window sparklines that break at missing days and clamp', () => {
+    const rows = sparkRows(
+      [
+        { day: iso(29), value: -35 },
+        { day: iso(27), value: -4 },
+        { day: iso(0), value: 3 }, // outside the window
+      ],
+      iso(29),
+      GAME_SPARK_DOMAIN,
+    )
+    expect(rows).toHaveLength(SPARK_DAYS)
+    expect(rows[rows.length - 1]).toEqual({ t: dayMs(iso(29)), v: -20 })
+    expect(rows[rows.length - 3].v).toBe(-4)
+    expect(rows[rows.length - 2].v).toBeNull()
+    expect(rows.filter((r) => r.v != null)).toHaveLength(2)
   })
 })
 
@@ -165,8 +181,12 @@ describe('trend shaping', () => {
     const s = trendSummary(trends, 'trace:all')
     expect(s).toMatchObject({ delta: -13, nSessions: 10, direction: 'declining' })
     expect(trendSummary([], 'trace:all').nSessions).toBe(0)
-    expect(deltaWords(-14)).toBe('−14 točk pod izhodiščem')
-    expect(deltaWords(2)).toContain('v pasu izhodišča')
+    expect(deltaWords(-14)).toBe('14 točk pod izhodiščem')
+    expect(deltaWords(-11.4)).toBe('11,4 točke pod izhodiščem')
+    expect(deltaWords(6)).toBe('6 točk nad izhodiščem')
+    expect(deltaWords(2)).toBe('v pasu izhodišča')
+    expect(pointsText(2)).toBe('2 točki')
+    expect(pointsText(-1)).toBe('1 točka')
     expect(deltaWords(null)).toBe('ni izhodišča')
   })
 })
@@ -200,6 +220,11 @@ describe('features', () => {
     expect(c.rows[2].key).toBe('pause_rate_hz')
     expect(c.rows[2].change).toBeCloseTo(0)
   })
+  it('lists each feature once across levels', () => {
+    const lv2 = sessions.map((s) => ({ ...s, id: s.id + 100, level: 2 }))
+    const keys = featureComparison([...sessions, ...lv2], null).rows.map((r) => r.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
   it('returns nothing when there are too few sessions', () => {
     expect(featureComparison(sessions.slice(0, 4), 1).rows).toEqual([])
     expect(featureComparison([], null).rows).toEqual([])
@@ -211,16 +236,18 @@ describe('features', () => {
   })
 })
 
-describe('symptoms', () => {
-  it('groups answers per question and keeps scales separate', () => {
-    const s = symptomSeries(questions, checkins)
-    expect(s.map((x) => x.question.id)).toEqual(['arm_function', 'fatigue'])
-    expect(s[1].points.map((p) => p.value)).toEqual([0, 1, 2, 3])
+describe('ratings', () => {
+  it('keeps wellbeing first and pain second, each on its own series', () => {
+    const s = ratingSeries(questions, checkins)
+    expect(s.map((x) => x.question.id)).toEqual(['wellbeing', 'pain'])
+    expect(s[0].points.map((p) => p.value)).toEqual([8, 7, 6, 5])
+    expect(s[1].points.map((p) => p.value)).toEqual([2, 3, 4])
   })
-  it('finds concern and warning-sign days', () => {
-    expect(concernPoints(checkins)).toHaveLength(1)
-    expect(concernPoints(checkins)[0].concern).toBe('little')
-    expect(warningDays(checkins).map((w) => w.day)).toEqual([iso(10)])
+  it('falls back to default questions when the pathway has none', () => {
+    expect(ratingSeries([], checkins).map((x) => x.question.shortLabel)).toEqual(['Počutje', 'Bolečina'])
+  })
+  it('lists check-ins newest first', () => {
+    expect(checkinRows(checkins).map((c) => c.id)).toEqual([4, 3, 2, 1])
   })
 })
 
@@ -236,20 +263,31 @@ describe('replay', () => {
 describe('alert evidence and action log', () => {
   it('reads evidence defensively', () => {
     const t = alertTriggers(alert)
-    expect(t).toHaveLength(2)
-    expect(t[0]).toMatchObject({ rule: 'combined_drop', severity: 'yellow' })
-    expect(alertConcernText(alert)).toBe('Roka mi je danes težja.')
+    expect(t).toHaveLength(1) // the junk entries are dropped
+    expect(t[0]).toMatchObject({ rule: 'trend_drop', severity: 'yellow' })
     expect(alertDivergence(alert)).toContain('padajo')
     expect(alertTriggers({ evidence: {} })).toEqual([])
     expect(alertDivergence({ evidence: {} })).toBeNull()
   })
+  it('picks at most two key facts: change vs baseline and the next visit', () => {
+    const p = { daysToNextVisit: 30, nextVisitDate: iso(59), summary: { nSessions: 10, nCheckins: 4, lastSessionDay: iso(27), lastCheckinDay: iso(15), combinedDelta: -9, combinedDirection: 'declining' as const } }
+    const f = alertFacts(alert, p, iso(29))
+    expect(f.map((x) => x.value)).toEqual(['11,4 točke pod izhodiščem', 'čez 30 dni'])
+    // no delta in the evidence: fall back to the patient summary
+    expect(alertFacts({ ...alert, evidence: {} }, p, iso(29))[0].value).toBe('9 točk pod izhodiščem')
+    // nothing to say about the change: only the visit
+    expect(alertFacts({ ...alert, evidence: {} }, { ...p, summary: { ...p.summary, combinedDelta: null } }, iso(29))).toHaveLength(1)
+    const subj = alertFacts({ rule: 'subjective_drop', evidence: { wellbeingChange: -1, painChange: 3 } }, p, iso(29))
+    expect(subj[0]).toMatchObject({ label: 'Bolečina', value: '3 točke višje kot teden prej' })
+    const nd = alertFacts({ rule: 'no_data', evidence: {} }, { ...p, daysToNextVisit: null, nextVisitDate: null }, iso(29))
+    expect(nd.map((x) => x.value)).toEqual(['pred 2 dneva', 'ni načrtovan'])
+  })
   it('assembles the log newest first', () => {
     const closed: Alert = { ...alert, status: 'closed', closedBy: 'c1', closedAt: `${iso(29)}T09:00:00Z`, outcome: 'called_reassured', note: 'Pomiril.' }
-    const msg: Message = { id: 1, patientId: 'p3', direction: 'to_patient', author: 'c1', text: 'Pokličem vas.', createdAt: `${iso(28)}T12:00:00Z` }
-    const log = assembleActionLog([closed], [msg], { called_reassured: 'Poklical, pomiril' }, { c1: 'dr. Novak' })
-    expect(log.map((l) => l.kind)).toEqual(['closed', 'message', 'acknowledged', 'opened'])
+    const log = assembleActionLog([closed], { called_reassured: 'Poklical, pomiril' }, { c1: 'dr. Novak' })
+    expect(log.map((l) => l.kind)).toEqual(['closed', 'acknowledged', 'opened'])
     expect(log[0].text).toContain('Poklical, pomiril')
     expect(log[0].detail).toBe('Pomiril.')
-    expect(log[2].text).toContain('dr. Novak')
+    expect(log[1].text).toContain('dr. Novak')
   })
 })

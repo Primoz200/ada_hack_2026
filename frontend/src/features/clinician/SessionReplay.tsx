@@ -4,8 +4,9 @@ import { api, unwrap, type SessionRaw, type SessionSummary } from '@/client/api'
 import { useAsync } from '@/lib/useAsync'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { LEVEL_NAMES, durationText, formatDay, pickBaselineSession, pointsAttr, splitStrokes, targetPoints } from './model'
+import { LEVEL_NAMES, dayMs, durationText, formatDay, pickBaselineSession, pointsAttr, splitStrokes, targetPoints } from './model'
 import { regionWord } from './GameChart'
+import { shortDay } from './chartLayout'
 
 interface Props {
   sessions: SessionSummary[] // trace sessions of the displayed level, any order
@@ -21,7 +22,7 @@ export function SessionReplay({ sessions, level, selected, onSelect }: Props) {
   const baseline = selected ? pickBaselineSession(levelSessions, level, selected.id) : null
 
   if (levelSessions.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">Za to stopnjo še ni sej za predvajanje.</p>
+    return <p className="py-6 text-center text-[0.9375rem] text-muted-foreground">Za to stopnjo še ni sej za predvajanje.</p>
   }
 
   return (
@@ -36,7 +37,7 @@ export function SessionReplay({ sessions, level, selected, onSelect }: Props) {
         <Legend />
       </div>
       <div>
-        <div className="mb-1.5 text-xs font-semibold">Seje: {LEVEL_NAMES[level] ?? `stopnja ${level}`}</div>
+        <div className="mb-2 text-[0.9375rem] font-semibold">Seje: {LEVEL_NAMES[level] ?? `stopnja ${level}`}</div>
         <ul className="max-h-[22rem] space-y-1 overflow-y-auto pr-1" data-testid="session-list">
           {[...levelSessions].reverse().map((s) => (
             <li key={s.id}>
@@ -45,12 +46,12 @@ export function SessionReplay({ sessions, level, selected, onSelect }: Props) {
                 onClick={() => onSelect(s)}
                 aria-pressed={selected?.id === s.id}
                 className={cn(
-                  'flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-muted',
-                  selected?.id === s.id ? 'border-foreground bg-muted font-semibold' : 'border-transparent',
+                  'tabular flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-left text-[0.875rem] transition-colors hover:bg-muted',
+                  selected?.id === s.id ? 'border-primary bg-accent font-semibold text-foreground' : 'border-transparent',
                 )}
               >
-                <span>{formatDay(s.day)}</span>
-                <span className="text-muted-foreground">{regionWord(s.score).replace(' območje', '')}</span>
+                <span className="whitespace-nowrap">{shortDay(dayMs(s.day))}</span>
+                <span className="whitespace-nowrap text-muted-foreground">{regionWord(s.score).replace(' območje', '')}</span>
               </button>
             </li>
           ))}
@@ -62,16 +63,16 @@ export function SessionReplay({ sessions, level, selected, onSelect }: Props) {
 
 function Legend() {
   return (
-    <div className="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+    <div className="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-[0.875rem] text-muted-foreground">
       <span className="inline-flex items-center gap-2">
         <svg width="28" height="8" aria-hidden>
-          <line x1="0" y1="4" x2="28" y2="4" stroke="var(--muted-foreground)" strokeWidth="3" strokeDasharray="5 4" strokeLinecap="round" />
+          <line x1="0" y1="4" x2="28" y2="4" stroke="var(--input)" strokeWidth="3" strokeDasharray="5 4" strokeLinecap="round" />
         </svg>
         želena črta
       </span>
       <span className="inline-flex items-center gap-2">
         <svg width="28" height="8" aria-hidden>
-          <line x1="0" y1="4" x2="28" y2="4" stroke="var(--foreground)" strokeWidth="2" strokeLinecap="round" />
+          <line x1="0" y1="4" x2="28" y2="4" stroke="var(--chart-1)" strokeWidth="2" strokeLinecap="round" />
         </svg>
         dejanska sled (vsak dvig prsta začne nov poteg)
       </span>
@@ -87,16 +88,16 @@ function TraceCard({ title, session, emptyText, accent }: { title: string; sessi
   return (
     <figure className="min-w-0">
       <figcaption className="mb-1.5 flex items-baseline justify-between gap-2">
-        <span className="text-xs font-semibold">{title}</span>
+        <span className="text-[0.9375rem] font-semibold">{title}</span>
         {session && (
-          <span className="text-xs text-muted-foreground">
+          <span className="tabular text-[0.875rem] text-muted-foreground">
             {formatDay(session.day)} · {durationText(session.durationMs)} · {regionWord(session.score)}
           </span>
         )}
       </figcaption>
-      <div className={cn('aspect-square w-full overflow-hidden rounded-lg border bg-card', accent && 'border-foreground/40')}>
+      <div className={cn('aspect-square w-full overflow-hidden rounded-lg border bg-card', accent && 'border-primary/50')}>
         {!session ? (
-          <Empty>{emptyText ?? 'Izberi sejo na grafu ali s seznama.'}</Empty>
+          <Empty>{emptyText ?? 'Izberite sejo na grafu ali s seznama.'}</Empty>
         ) : loading ? (
           <Skeleton className="h-full w-full rounded-none" />
         ) : error ? (
@@ -110,7 +111,7 @@ function TraceCard({ title, session, emptyText, accent }: { title: string; sessi
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground">{children}</div>
+  return <div className="flex h-full items-center justify-center p-4 text-center text-[0.875rem] text-muted-foreground">{children}</div>
 }
 
 export function TraceSvg({ series }: { series: Record<string, number[]> }) {
@@ -123,8 +124,8 @@ export function TraceSvg({ series }: { series: Record<string, number[]> }) {
       <polyline
         points={pointsAttr(target)}
         fill="none"
-        stroke="var(--muted-foreground)"
-        strokeOpacity={0.75}
+        stroke="var(--input)"
+        strokeOpacity={0.8}
         strokeWidth={5}
         strokeDasharray="10 8"
         strokeLinecap="round"
@@ -136,14 +137,14 @@ export function TraceSvg({ series }: { series: Record<string, number[]> }) {
           key={`${s.id}-${i}`}
           points={pointsAttr(s.points)}
           fill="none"
-          stroke="var(--foreground)"
+          stroke="var(--chart-1)"
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
       ))}
-      {strokes[0]?.points[0] && <circle cx={strokes[0].points[0].x} cy={strokes[0].points[0].y} r={0.012} fill="var(--foreground)" />}
+      {strokes[0]?.points[0] && <circle cx={strokes[0].points[0].x} cy={strokes[0].points[0].y} r={0.012} fill="var(--chart-1)" />}
     </svg>
   )
 }
