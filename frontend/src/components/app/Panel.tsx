@@ -7,7 +7,7 @@ export function Panel({ className, ...props }: ComponentProps<'section'>) {
 }
 
 /** Page heading that sits directly on the page background, above the panels. */
-export function PageTitle({ title, children }: { title: string; children?: React.ReactNode }) {
+export function PageTitle({ title, children }: { title: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 px-2">
       <h1 className="text-[2.25rem] leading-tight font-bold">{title}</h1>

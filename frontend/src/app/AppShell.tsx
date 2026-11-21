@@ -16,14 +16,14 @@ function Frame({ left, right }: { left: React.ReactNode; right: React.ReactNode 
     <div className="flex min-h-dvh flex-col">
       <PrototypeBanner />
       <header className="bg-card">
-        <div className="mx-auto flex h-20 max-w-[1240px] items-center justify-between gap-4 px-6">
-          <div className="flex min-w-0 items-center gap-6">{left}</div>
+        <div className="mx-auto flex min-h-20 max-w-[1240px] flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-3">{left}</div>
           <nav className="flex items-center gap-3">{right}</nav>
         </div>
       </header>
       {/* the header's white fades into the page, as on the portal */}
       <div className="h-16 bg-gradient-to-b from-card to-background" aria-hidden />
-      <main className="mx-auto -mt-8 w-full max-w-[1240px] flex-1 px-6 pb-16">
+      <main className="mx-auto -mt-8 w-full max-w-[1240px] flex-1 px-4 pb-16 sm:px-6">
         <Outlet />
       </main>
     </div>
