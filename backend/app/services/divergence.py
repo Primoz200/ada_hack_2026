@@ -15,12 +15,11 @@ OBJECTIVE_DROP = 10.0  # combined trend this far below baseline = objectively wo
 OBJECTIVE_OK = 5.0  # within this band = objectively stable
 SUBJECTIVE_WORSE = -0.15  # change of the wellbeing index (0-1) that counts as worse
 SUBJECTIVE_SAME = -0.05  # at or above this = same or better
-CONCERN_PENALTY = {"none": 0.0, "little": 0.15, "call": 0.30}
 
 
 def wellbeing(pathway: Pathway, checkin: Checkin) -> Optional[float]:
-    """0-1, higher = the patient reports feeling better. Mean of the answered questions,
-    each normalised by its range, minus a penalty for a reported concern."""
+    """0-1, higher = the patient reports feeling better. Mean of the answered ratings
+    (v8: wellbeing and pain), each normalised by its range."""
     vals = []
     for q in pathway.questions:
         if q["id"] not in checkin.answers:
@@ -30,7 +29,7 @@ def wellbeing(pathway: Pathway, checkin: Checkin) -> Optional[float]:
         vals.append(1.0 - v if q.get("higherIsWorse", True) else v)
     if not vals:
         return None
-    return max(0.0, sum(vals) / len(vals) - CONCERN_PENALTY.get(checkin.concern, 0.0))
+    return sum(vals) / len(vals)
 
 
 def subjective_change(db: Session, patient_id: str, day: date) -> Optional[float]:
@@ -63,7 +62,7 @@ def assess(db: Session, patient_id: str, day: date) -> tuple[bool, Optional[str]
     if delta is None or change is None:
         return False, None
     if delta <= -OBJECTIVE_DROP and change >= SUBJECTIVE_SAME:
-        return True, "Rezultati igre padajo, pacient pa poroča enako ali boljše počutje."
+        return True, "Rezultati sledenja padajo, pacient pa poroča enako ali boljše počutje."
     if abs(delta) < OBJECTIVE_OK and change <= SUBJECTIVE_WORSE:
-        return True, "Rezultati igre so stabilni, pacient pa poroča slabše počutje."
+        return True, "Rezultati sledenja so stabilni, pacient pa poroča slabše počutje."
     return False, None

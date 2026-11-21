@@ -7,7 +7,7 @@ from sqlmodel import Session
 
 from app import db as dbmod
 from app.main import app
-from app.models import Alert, Checkin, GameSession, Message, Patient, TrendSnapshot
+from app.models import Alert, Checkin, GameSession, Patient, TrendSnapshot
 from app.services import clock
 
 
@@ -36,14 +36,15 @@ def mk_patient(pid, sort=10, discharged=20, demo=False, pathway="stroke", visit=
         s.commit()
 
 
-def mk_checkin(pid, back, **kw):
+def mk_checkin(pid, back, wellbeing=7, pain=2):
     d = clock.today() - timedelta(days=back)
     with _s() as s:
-        s.add(Checkin(patient_id=pid, day=d, created_at=clock.at(d, 8), **kw))
+        s.add(Checkin(patient_id=pid, day=d, created_at=clock.at(d, 8),
+                      answers={"wellbeing": wellbeing, "pain": pain}))
         s.commit()
 
 
-def mk_session(pid, back, level=1, completed=True, counts=True):
+def mk_session(pid, back, level=1, completed=True, counts=True):  # noqa: D103
     d = clock.today() - timedelta(days=back)
     with _s() as s:
         s.add(GameSession(patient_id=pid, game_type="trace", level=level, hand="right",
@@ -78,7 +79,7 @@ def row(api, pid):
 
 def test_contract_shapes_and_404(api):
     assert api.get("/api/patients").status_code == 200
-    for suffix in ("", "/timeline", "/today", "/progress"):
+    for suffix in ("", "/timeline", "/home", "/selfcheck/summary", "/progress"):
         assert api.get(f"/api/patients/base{suffix}").status_code == 200
         assert api.get(f"/api/patients/nope{suffix}").status_code == 404
     assert '"series"' not in api.get("/api/patients").text
@@ -88,7 +89,8 @@ def test_contract_shapes_and_404(api):
 def test_pathways(api):
     r = api.get("/api/pathways").json()
     assert {p["code"] for p in r} >= {"stroke", "ctr"}
-    assert r[0]["games"][0]["levels"] and r[0]["warningSignsPrompt"]
+    assert r[0]["games"][0]["levels"] == [1, 2, 3]
+    assert [q["id"] for q in r[0]["questions"]] == ["wellbeing", "pain"]
 
 
 def test_status_red_yellow_grey(api):
@@ -164,27 +166,26 @@ def test_ordering_and_counters(api):
     assert c["needsAttention"] + c["noData"] + c["stable"] == c["total"]
 
 
-def test_sparkline_and_checkins7d(api):
-    mk_patient("sp")
-    for b in (20, 13, 5, 3, 1):
+def test_sparklines(api):
+    mk_patient("sp", discharged=60)
+    for b in range(30, 0, -1):
         mk_snap("sp", b, float(b))
-    mk_snap("sp", 2, 99.0, metric="trace:1")
-    mk_snap("sp", 4, None)
+    mk_snap("sp", 2, 99.0, metric="trace:1")  # per-level rows are not in the sparkline
+    mk_snap("sp", 0, None)  # no delta yet: skipped
     for b in (0, 1, 3, 6, 7, 9):
-        mk_checkin("sp", b)
-    mk_checkin("sp", 1)  # duplicate day counts once
+        mk_checkin("sp", b, wellbeing=10 - b if b < 9 else 1)
     r = row(api, "sp")
-    assert [p["value"] for p in r["sparkline"]] == [13.0, 5.0, 3.0, 1.0]
-    assert [p["day"] for p in r["sparkline"]] == sorted(p["day"] for p in r["sparkline"])
-    assert r["checkins7d"] == 4
+    # the last 21 days that have a combined trend
+    assert [p["value"] for p in r["gameSparkline"]] == [float(b) for b in range(21, 0, -1)]
+    assert [p["day"] for p in r["gameSparkline"]] == sorted(p["day"] for p in r["gameSparkline"])
+    assert [p["value"] for p in r["wellbeingSparkline"]] == [1.0, 3.0, 4.0, 7.0, 9.0, 10.0]
 
 
 def test_divergence_surfaces(api):
     mk_patient("dv")
-    good = {"arm_function": 5, "fatigue": 0, "fall": 0}
-    mk_checkin("dv", 0, answers=good)
-    mk_checkin("dv", 1, answers=good)
-    mk_checkin("dv", 9, answers={"arm_function": 3, "fatigue": 2, "fall": 0})
+    mk_checkin("dv", 0, wellbeing=8, pain=2)
+    mk_checkin("dv", 1, wellbeing=8, pain=2)
+    mk_checkin("dv", 9, wellbeing=6, pain=3)
     mk_snap("dv", 0, -15.0, "declining")
     assert row(api, "dv")["diverging"] is True
     assert api.get("/api/patients/dv").json()["diverging"] is True
@@ -202,6 +203,7 @@ def test_timeline_ordering_no_series(api):
     mk_snap("tl", 1, 1.0)
     mk_snap("tl", 3, 2.0)
     t = api.get("/api/patients/tl/timeline").json()
+    assert "messages" not in t
     for key in ("sessions", "checkins", "trends"):
         assert len(t[key]) == 2
         days = [x["day"] for x in t[key]]
@@ -209,59 +211,56 @@ def test_timeline_ordering_no_series(api):
     assert "series" not in str(t)
 
 
-def test_today_tasks_streak_reminder(api):
-    mk_patient("td")
-    mk_session("td", 0, level=1)
-    mk_session("td", 0, level=2, completed=False)
-    t = api.get("/api/patients/td/today").json()
-    done = {x["id"]: x["done"] for x in t["tasks"]}
-    assert done == {"checkin": False, "trace:1": True, "trace:2": False, "trace:3": False}
-    assert t["reminder"] is None and t["streakDays"] == 1
-    mk_checkin("td", 0)
-    assert api.get("/api/patients/td/today").json()["tasks"][0]["done"] is True
+def test_home_steps_and_done_today(api):
+    mk_patient("hm")
+    h = api.get("/api/patients/hm/home").json()
+    assert [(s["id"], s["kind"], s["title"]) for s in h["steps"]] == [
+        ("ratings", "ratings", "Počutje in bolečina"), ("trace:1", "game", "Ravna črta"),
+        ("trace:2", "game", "Krog"), ("trace:3", "game", "Labirint")]
+    assert h["steps"][1]["gameType"] == "trace" and h["steps"][1]["level"] == 1
+    assert not any(s["done"] for s in h["steps"]) and h["selfcheckDoneToday"] is False
+    assert h["lastSelfcheckDay"] is None and h["hand"] == "right"
+    mk_checkin("hm", 2)
+    mk_checkin("hm", 0)
+    mk_session("hm", 0, level=1)
+    mk_session("hm", 0, level=2, completed=False, counts=False)  # aborted: not done
+    mk_session("hm", 1, level=3)  # yesterday: not done today
+    h = api.get("/api/patients/hm/home").json()
+    assert [s["done"] for s in h["steps"]] == [True, True, False, False]
+    assert h["selfcheckDoneToday"] is False and h["lastSelfcheckDay"] == clock.today().isoformat()
+    mk_session("hm", 0, level=2)
+    mk_session("hm", 0, level=3)
+    assert api.get("/api/patients/hm/home").json()["selfcheckDoneToday"] is True
 
 
-def test_streak_with_gap_and_week(api):
-    mk_patient("st")
-    for b in (1, 2, 3, 5, 6):
-        mk_checkin("st", b)
-    t = api.get("/api/patients/st/today").json()
-    assert t["streakDays"] == 3  # today empty -> counts from yesterday; gap at 4
-    assert t["weekDone"] == 5
-    assert t["reminder"] is None
-    p = api.get("/api/patients/st/progress").json()
-    assert p["weekDone"] == 5 and p["weekGoal"] == 5
+def test_summary_without_data_and_with_points(api):
+    mk_patient("sm")
+    s = api.get("/api/patients/sm/selfcheck/summary").json()
+    assert (s["tone"], s["trend"], s["levelsDone"], s["levelsTotal"], s["points"]) == ("first", "unknown", 0, 3, [])
+    assert s["title"] and s["text"] and s["day"] == clock.today().isoformat()
+    for b, v in ((20, -9.0), (13, -6.0), (5, 0.0), (3, 6.0), (1, -1.0)):
+        mk_snap("sm", b, v)
+    s = api.get("/api/patients/sm/selfcheck/summary").json()
+    # today has nothing yet: describes the latest day; points are the last 14 days only
+    assert [(p["value"], p["label"]) for p in s["points"]] == [
+        (-6.0, "lower"), (0.0, "usual"), (6.0, "better"), (-1.0, "usual")]
+    assert s["tone"] == "similar" and s["trend"] == "stable"  # -1 vs the mean of the previous days
 
 
-def test_reminder_after_two_missed_days(api):
-    mk_patient("rm")
-    mk_checkin("rm", 1)
-    assert api.get("/api/patients/rm/today").json()["reminder"] is None
-    mk_patient("rm2")
-    mk_checkin("rm2", 2)
-    assert "Pogrešali" in api.get("/api/patients/rm2/today").json()["reminder"]
-
-
-def test_last_message_and_review(api):
-    mk_patient("m")
-    ack = clock.at(clock.today() - timedelta(days=1), 12)
-    mk_alert("m", "yellow", status="acknowledged", ack=ack)
-    with _s() as s:
-        s.add(Message(patient_id="m", direction="to_patient", author="Dr", text="Pozdravljeni",
-                      created_at=clock.at(clock.today() - timedelta(days=2), 9)))
-        s.add(Message(patient_id="m", direction="system", text="Sistem", created_at=clock.now()))
-        s.commit()
-    t = api.get("/api/patients/m/today").json()
-    assert t["lastMessage"]["text"] == "Pozdravljeni"
-    assert t["clinicianReviewedAt"].startswith(str(clock.today() - timedelta(days=1)))
-    assert api.get("/api/patients/m/progress").json()["clinicianReviewedAt"]
-
-
-def test_progress_labels_and_best(api):
-    mk_patient("pr")
-    for b, d in ((5, -8.0), (4, 0.0), (3, 7.0), (2, 12.0), (1, 4.9)):
-        mk_snap("pr", b, d)
-    mk_snap("pr", 0, None)
-    p = api.get("/api/patients/pr/progress").json()
-    assert [x["label"] for x in p["points"]] == ["lower", "usual", "better", "better", "usual"]
-    assert p["personalBestDay"] == str(clock.today() - timedelta(days=2))
+def test_progress(api):
+    mk_patient("pg")
+    for b, v in ((10, -2.0), (8, 7.5), (2, 3.0)):
+        mk_snap("pg", b, v)
+    for b in (0, 1, 3, 9):
+        mk_checkin("pg", b, wellbeing=6, pain=4)
+    mk_session("pg", 5)
+    p = api.get("/api/patients/pg/progress").json()
+    assert [x["value"] for x in p["points"]] == [-2.0, 7.5, 3.0]
+    assert p["personalBestDay"] == (clock.today() - timedelta(days=8)).isoformat()
+    assert [(r["wellbeing"], r["pain"]) for r in p["ratings"]] == [(6.0, 4.0)] * 4
+    assert (p["weekDone"], p["weekGoal"]) == (4, 5)  # days 0, 1, 3 (check-ins) + 5 (session)
+    assert p["clinicianReviewedAt"] is None
+    assert p["tone"] in ("better", "similar", "lower") and p["title"] and p["text"]
+    mk_alert("pg", "yellow", ack=clock.at(clock.today(), 11))
+    assert api.get("/api/patients/pg/progress").json()["clinicianReviewedAt"].startswith(
+        clock.today().isoformat())

@@ -1,14 +1,23 @@
-"""Read path for patients. Phase 0: minimal bodies; agent B completes them."""
-from fastapi import APIRouter, HTTPException
+"""Read path for patients: triage list, detail, timeline and the patient's own screens."""
+from datetime import timedelta
+
+from fastapi import APIRouter
 from sqlmodel import select
 
 from app.deps import Db, require_patient
 from app.models import Alert, Checkin, GameSession, Pathway, Patient, TrendSnapshot
 from app.models.schemas import (
     CheckinOut, PatientDetail, PatientHomeOut, PatientListItem, PatientListOut, PatientSummary, ProgressOut,
-    ProgressPoint, SelfcheckSummary, SessionSummary, SparkPoint, TimelineOut, TrendPoint, TriageCounters,
+    ProgressPoint, RatingPoint, SelfcheckStep, SelfcheckSummary, SessionSummary, SparkPoint, TimelineOut,
+    TrendPoint, TriageCounters,
 )
-from app.services import alerts, clock, queries
+from app.seed.pathways import LEVEL_TITLES
+from app.services import alerts, clock, feedback, queries
+
+RATINGS_TITLE = "Počutje in bolečina"
+SUMMARY_DAYS = 14
+POINT_BAND = 5.0  # combined trend beyond +-this many points is labelled better / lower
+WEEK_GOAL = 5
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
 
@@ -29,8 +38,9 @@ def list_patients(db: Db):
             id=p.id, name=p.name, pathway_code=p.pathway_code, pathway_name=pathways[p.pathway_code].name,
             side=p.side, days_since_discharge=(today - p.discharge_date).days, status=st.status,
             reason=st.reason, diverging=st.diverging,
-            sparkline=[SparkPoint(day=d, value=v) for d, v in queries.sparkline(db, p.id, today)],
-            checkins_7d=queries.days_with_checkin(db, p.id, today, 7),
+            game_sparkline=[SparkPoint(day=d, value=v) for d, v in queries.game_sparkline(db, p.id, today)],
+            wellbeing_sparkline=[SparkPoint(day=d, value=v)
+                                 for d, v in queries.wellbeing_sparkline(db, p.id, today)],
             days_to_next_visit=(p.next_visit_date - today).days if p.next_visit_date else None,
             open_alert_id=st.alert.id if st.alert else None, is_demo=p.is_demo)
         rows.append(((queries.URGENCY[st.status], -(st.alert.id if st.alert else 0), p.sort_order), item))
@@ -71,31 +81,79 @@ def get_timeline(patient_id: str, db: Db):
     trends = db.exec(select(TrendSnapshot).where(TrendSnapshot.patient_id == p.id)
                      .order_by(TrendSnapshot.day)).all()
     alerts = db.exec(select(Alert).where(Alert.patient_id == p.id).order_by(Alert.id)).all()
-    messages = db.exec(select(Message).where(Message.patient_id == p.id).order_by(Message.created_at)).all()
     return TimelineOut(
         patient_id=p.id, today=clock.today(), discharge_date=p.discharge_date,
         next_visit_date=p.next_visit_date,
         sessions=[SessionSummary.model_validate(s) for s in sessions],
         checkins=[CheckinOut.model_validate(c) for c in checkins],
         trends=[TrendPoint.model_validate(t) for t in trends],
-        alerts=[queries.alert_out(db, a) for a in alerts],
-        messages=[MessageOut.model_validate(m) for m in messages])
+        alerts=[queries.alert_out(db, a) for a in alerts])
+
+
+def _label(delta: float) -> str:
+    return "lower" if delta <= -POINT_BAND else "better" if delta >= POINT_BAND else "usual"
+
+
+def _points(snaps) -> list[ProgressPoint]:
+    return [ProgressPoint(day=s.day, value=round(s.delta, 1), label=_label(s.delta)) for s in snaps]
+
+
+def _steps(db, p: Patient, today) -> list[SelfcheckStep]:
+    pathway = db.get(Pathway, p.pathway_code)
+    has_checkin = db.exec(select(Checkin.id).where(Checkin.patient_id == p.id,
+                                                   Checkin.day == today)).first() is not None
+    steps = [SelfcheckStep(id="ratings", kind="ratings", title=RATINGS_TITLE, done=has_checkin)]
+    done = queries.completed_levels(db, p.id, today)
+    for game_type, level in queries.pathway_levels(pathway):
+        steps.append(SelfcheckStep(
+            id=f"{game_type}:{level}", kind="game", game_type=game_type, level=level,
+            title=LEVEL_TITLES.get((game_type, level), f"Stopnja {level}"),
+            done=(game_type, level) in done))
+    return steps
 
 
 @router.get("/{patient_id}/home", response_model=PatientHomeOut, operation_id="getPatientHome")
 def get_home(patient_id: str, db: Db):
     """Patient landing page: name and today's self-check steps."""
-    raise HTTPException(501, "Ni še implementirano")
+    p = require_patient(db, patient_id)
+    today = clock.today()
+    s_days, c_days, _, _ = queries.entry_days(db, p.id)
+    days = {d for d in s_days | c_days if d <= today}
+    steps = _steps(db, p, today)
+    return PatientHomeOut(
+        patient_id=p.id, name=p.name, pathway_code=p.pathway_code,
+        pathway_name=db.get(Pathway, p.pathway_code).name, hand=p.side, today=today, steps=steps,
+        selfcheck_done_today=all(s.done for s in steps), last_selfcheck_day=max(days, default=None))
 
 
 @router.get("/{patient_id}/selfcheck/summary", response_model=SelfcheckSummary,
             operation_id="getSelfcheckSummary")
 def get_selfcheck_summary(patient_id: str, db: Db):
     """How today's self-check went compared with previous days (shown at the end)."""
-    raise HTTPException(501, "Ni še implementirano")
+    p = require_patient(db, patient_id)
+    today = clock.today()
+    fb = feedback.feedback_for(db, p.id, today)
+    games = [s for s in _steps(db, p, today) if s.kind == "game"]
+    since = today - timedelta(days=SUMMARY_DAYS - 1)
+    snaps = [s for s in feedback.combined_points(db, p.id, today) if s.day >= since]
+    return SelfcheckSummary(
+        tone=fb.tone, trend=fb.trend, title=fb.title, text=fb.text, patient_id=p.id, day=today,
+        levels_done=sum(1 for s in games if s.done), levels_total=len(games), points=_points(snaps))
 
 
 @router.get("/{patient_id}/progress", response_model=ProgressOut, operation_id="getProgress")
 def get_progress(patient_id: str, db: Db):
     """"Moj napredek": a very simple dashboard."""
-    raise HTTPException(501, "Ni še implementirano")
+    p = require_patient(db, patient_id)
+    today = clock.today()
+    fb = feedback.feedback_for(db, p.id, today)
+    snaps = feedback.combined_points(db, p.id, today)
+    best = max(snaps, key=lambda s: (s.delta, s.day), default=None)
+    s_days, c_days, _, _ = queries.entry_days(db, p.id)
+    ratings = [RatingPoint(day=c.day, wellbeing=c.answers.get("wellbeing"), pain=c.answers.get("pain"))
+               for c in queries.checkins_of(db, p.id, today)]
+    return ProgressOut(
+        tone=fb.tone, trend=fb.trend, title=fb.title, text=fb.text, patient_id=p.id,
+        points=_points(snaps), ratings=ratings, personal_best_day=best.day if best else None,
+        week_done=queries.days_with_entry(s_days | c_days, today, 7), week_goal=WEEK_GOAL,
+        clinician_reviewed_at=queries.latest_review(db, p.id))

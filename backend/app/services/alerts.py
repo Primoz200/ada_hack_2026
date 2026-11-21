@@ -1,16 +1,20 @@
-"""Alert rules and the human-in-the-loop state machine (plan section 8).
+"""Alert rules and the human-in-the-loop state machine (plan section 8, v8).
 
-All thresholds are parameters here. Rules (all evaluated as of a `day`):
+v8: alerts are the clinician's business only; the patient never sees them and is never
+prompted to call anyone. All thresholds are parameters here. Rules (evaluated as of a `day`):
 
-* red    warning_sign   a check-in of that day answered a warning sign "yes"
-* red    double_yellow  a game yellow (trend_drop) and a check-in yellow (symptom_rise, or
-                        concern_call in the last CONCURRENT_DAYS days) hold at the same time
-* yellow trend_drop     combined trend (trace:all delta) <= -YELLOW_DROP_POINTS on at least
-                        YELLOW_DAYS_HIT of the last YELLOW_DAYS_WINDOW days that have a session
-* yellow symptom_rise   7-day mean of pain / tingling >= previous 7-day mean + threshold
-                        (muted by the pathway's muted_patterns)
-* yellow concern_call   the patient answered concern = "call"
-* grey   no_data        no check-in and no session for GREY_AFTER_MISSED_DAYS days (sweep)
+* yellow trend_drop       the latest combined trend (trace:all delta) <= -TREND_DROP_POINTS
+                          AND on at least PREVIOUS_DAYS_HIT of the previous PREVIOUS_DAYS_WINDOW
+                          session-days the delta was <= -BELOW_BAND_POINTS (outside the
+                          baseline band). One bad day of a stable patient opens nothing; a
+                          patient who has been drifting below baseline tips over.
+* yellow subjective_drop  7-day mean of `wellbeing` >= WELLBEING_DROP_POINTS lower than the
+                          7 days before, OR 7-day mean of `pain` >= PAIN_RISE_POINTS higher.
+                          Each week needs MIN_CHECKINS_PER_WEEK check-ins.
+* red    both             trend_drop and subjective_drop hold at the same time
+* red    big_drop         the latest combined delta <= -BIG_DROP_POINTS
+* grey   no_data          no check-in and no session for GREY_AFTER_MISSED_DAYS days (sweep);
+                          closes by itself once data arrives
 
 Anti-noise: exactly one open (status != closed) alert per patient. New triggers are appended
 to evidence["triggers"]; severity / rule / reason escalate to the most severe trigger.
@@ -18,33 +22,40 @@ to evidence["triggers"]; severity / rule / reason escalate to the most severe tr
 "Same episode" (no re-fire after the clinician closed an alert): a trigger is suppressed when
 a clinician-closed alert of that patient contains the same rule, the trigger is not more
 severe than that alert, and either the trigger concerns data up to the closing day or the
-closing was less than SUPPRESS_DAYS_AFTER_CLOSE days ago. A warning_sign is only suppressed
-for the day that was closed: a new check-in with a sign on a later day always alerts.
-Acknowledged-but-open alerts simply keep collecting triggers (no new alert); if one is
-escalated to a worse severity it returns to "new" so the clinician sees it again.
+closing was less than SUPPRESS_DAYS_AFTER_CLOSE days ago. Acknowledged-but-open alerts
+simply keep collecting triggers (no new alert); if one is escalated to a worse severity it
+returns to "new" so the clinician sees it again.
+
+Reasons are one short Slovenian sentence without numbers; the numbers are in `evidence`.
 """
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from sqlmodel import Session, select
 
-from app.models import Alert, Checkin, Clinician, GameSession, Pathway, Patient, TrendSnapshot
+from app.models import Alert, Checkin, Clinician, GameSession, Patient, TrendSnapshot
 from app.services import clock, divergence
 
-YELLOW_DROP_POINTS = 10.0  # combined trend at least this far below baseline ...
-YELLOW_DAYS_HIT = 2  # ... on this many ...
-YELLOW_DAYS_WINDOW = 3  # ... of the last N days that have a session
-PAIN_RISE_POINTS = 2.0  # pain week-over-week
-TINGLING_RISE_POINTS = 1.0  # tingling (0-4 scale) week-over-week
-MIN_CHECKINS_PER_WEEK = 2  # both weeks need this many check-ins for a symptom comparison
-REMINDER_AFTER_MISSED_DAYS = 2  # patient gets an automatic reminder
+TREND_DROP_POINTS = 10.0  # latest combined trend at least this far below baseline ...
+BELOW_BAND_POINTS = 5.0  # ... and outside the baseline band (<= -5) ...
+PREVIOUS_DAYS_HIT = 2  # ... on at least this many ...
+PREVIOUS_DAYS_WINDOW = 3  # ... of the previous N session-days
+BIG_DROP_POINTS = 20.0  # latest combined trend this far below baseline: red on its own
+WELLBEING_DROP_POINTS = 2.0  # wellbeing (1-10, higher = better) week over week
+PAIN_RISE_POINTS = 2.0  # pain (1-10, higher = worse) week over week
+WEEK_DAYS = 7
+MIN_CHECKINS_PER_WEEK = 2  # both weeks need this many check-ins for a comparison
 GREY_AFTER_MISSED_DAYS = 4  # clinician sees "brez podatkov"
-CONCURRENT_DAYS = 3  # a concern_call this recent counts as a concurrent check-in yellow
 SUPPRESS_DAYS_AFTER_CLOSE = 7  # same rule does not reopen within this many days of closing
 
-SYMPTOM_RULES = {  # question id -> (Slovenian label, rise threshold)
-    "pain": ("Bolečina", PAIN_RISE_POINTS),
-    "tingling": ("Mravljinčenje", TINGLING_RISE_POINTS),
+REASONS = {
+    "trend_drop": "Rezultati sledenja so že več dni pod pacientovim izhodiščem.",
+    "big_drop": "Rezultati sledenja so močno padli pod pacientovo izhodišče.",
+    "both": "Padajo rezultati sledenja in počutje hkrati.",
+    "wellbeing": "Pacient poroča slabše počutje kot prejšnji teden.",
+    "pain": "Pacient poroča močnejšo bolečino kot prejšnji teden.",
+    "wellbeing_pain": "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden.",
+    "no_data": "Pacient že več dni nima nobenega vnosa ali meritve.",
 }
 
 OUTCOME_LABELS = {
@@ -57,11 +68,9 @@ OUTCOME_LABELS = {
 }
 
 SEVERITY_RANK = {"grey": 0, "yellow": 1, "red": 2}
-SYSTEM_ACK_TEXT = "Zdravnik je pregledal vaše rezultate."
-
-
-# at equal severity the more urgent rule is the one shown (a sign beats the combined rule)
-RULE_PRIORITY = {"warning_sign": 2, "double_yellow": 1}
+# at equal severity the rule shown is the more telling one (both signals beat one big drop)
+RULE_PRIORITY = {"both": 2, "big_drop": 1}
+GAME_RULES = ("trend_drop", "big_drop", "both")
 
 
 def _priority(t: dict) -> tuple[int, int]:
@@ -84,10 +93,6 @@ def _stamp(day: date) -> datetime:
     return clock.now() if day == clock.today() else clock.at(day, 12)
 
 
-def _num(x: float) -> str:
-    return f"{x:.1f}".replace(".", ",")
-
-
 def _trigger(rule: str, severity: str, source: str, day: date, reason: str, **extra: Any) -> dict:
     return {"rule": rule, "severity": severity, "source": source, "day": day, "reason": reason,
             "extra": extra}
@@ -95,99 +100,80 @@ def _trigger(rule: str, severity: str, source: str, day: date, reason: str, **ex
 
 # ------------------------------------------------------------------ rule evaluation
 
-def _warning_trigger(db: Session, pathway: Pathway, patient_id: str, day: date) -> Optional[dict]:
-    rows = db.exec(select(Checkin).where(Checkin.patient_id == patient_id, Checkin.day == day)).all()
-    rows = [c for c in rows if c.warning_signs]
-    if not rows:
-        return None
-    ids: list[str] = []
-    for c in rows:
-        ids += [s for s in c.warning_signs if s not in ids]
-    texts = {w["id"]: w["text"] for w in pathway.warning_signs}
-    names = ", ".join(texts.get(i, i)[:1].lower() + texts.get(i, i)[1:] for i in ids)
-    return _trigger("warning_sign", "red", "checkin", day,
-                    f"Pacient je v dnevnem vnosu pritrdil opozorilnemu znaku: {names}.",
-                    warningSigns=ids, checkinIds=[c.id for c in rows])
-
-
-def _trend_trigger(db: Session, patient_id: str, day: date) -> Optional[dict]:
-    snaps = db.exec(select(TrendSnapshot).where(
+def _combined(db: Session, patient_id: str, day: date, n: int) -> list[TrendSnapshot]:
+    """The last n trace:all snapshots with a delta up to `day`, newest first."""
+    return list(db.exec(select(TrendSnapshot).where(
         TrendSnapshot.patient_id == patient_id, TrendSnapshot.metric == "trace:all",
         TrendSnapshot.day <= day, TrendSnapshot.delta != None  # noqa: E711
-    ).order_by(TrendSnapshot.day.desc()).limit(YELLOW_DAYS_WINDOW)).all()
-    hits = [s for s in snaps if s.delta <= -YELLOW_DROP_POINTS]
-    if len(hits) < YELLOW_DAYS_HIT:
-        return None
-    days = [s.day for s in snaps]
-    sess = db.exec(select(GameSession.id).where(
+    ).order_by(TrendSnapshot.day.desc()).limit(n)).all())
+
+
+def _session_ids(db: Session, patient_id: str, days: list[date]) -> list[int]:
+    return list(db.exec(select(GameSession.id).where(
         GameSession.patient_id == patient_id, GameSession.game_type == "trace",
-        GameSession.day.in_(days), GameSession.counts_for_trend == True)).all()  # noqa: E712
-    return _trigger(
-        "trend_drop", "yellow", "game", snaps[0].day,
-        f"Skupni trend je že {len(hits)} od zadnjih {len(snaps)} dni vsaj "
-        f"{YELLOW_DROP_POINTS:.0f} točk pod izhodiščem.",
-        delta=round(snaps[0].delta, 1), sessionIds=list(sess))
+        GameSession.day.in_(days), GameSession.counts_for_trend == True)).all())  # noqa: E712
 
 
-def _symptom_triggers(db: Session, pathway: Pathway, patient: Patient, day: date) -> list[dict]:
-    rows = db.exec(select(Checkin).where(
-        Checkin.patient_id == patient.id, Checkin.day <= day,
-        Checkin.day > day - timedelta(days=14))).all()
-    out = []
-    for qid, (label, threshold) in SYMPTOM_RULES.items():
-        recent = [c for c in rows if c.day > day - timedelta(days=7) and qid in c.answers]
-        before = [c for c in rows if c.day <= day - timedelta(days=7) and qid in c.answers]
-        if len(recent) < MIN_CHECKINS_PER_WEEK or len(before) < MIN_CHECKINS_PER_WEEK:
-            continue
-        m_recent = sum(c.answers[qid] for c in recent) / len(recent)
-        m_before = sum(c.answers[qid] for c in before) / len(before)
-        if m_recent < m_before + threshold:
-            continue
-        # pathway-muted expected pattern (e.g. ctr pain in the first weeks, below a ceiling)
-        since = (day - patient.discharge_date).days
-        if any(m.get("question") == qid and since <= m.get("untilDay", 0)
-               and m_recent <= m.get("maxValue", 0) for m in pathway.muted_patterns):
-            continue
-        out.append(_trigger(
-            "symptom_rise", "yellow", "checkin", day,
-            f"{label} je v zadnjih 7 dneh v povprečju za {_num(m_recent - m_before)} točke višja kot teden prej.",
-            question=qid, recentMean=round(m_recent, 2), previousMean=round(m_before, 2),
-            checkinIds=[c.id for c in recent]))
-    return out
+def _game_triggers(db: Session, patient_id: str, day: date) -> tuple[Optional[dict], Optional[dict]]:
+    """(trend_drop, big_drop) triggers, each None when the rule does not hold."""
+    snaps = _combined(db, patient_id, day, PREVIOUS_DAYS_WINDOW + 1)
+    if not snaps:
+        return None, None
+    latest, previous = snaps[0], snaps[1:]
+    ids = _session_ids(db, patient_id, [s.day for s in snaps])
+    delta = round(latest.delta, 1)
+    drop = big = None
+    hits = sum(1 for s in previous if s.delta <= -BELOW_BAND_POINTS)
+    if latest.delta <= -TREND_DROP_POINTS and hits >= PREVIOUS_DAYS_HIT:
+        drop = _trigger("trend_drop", "yellow", "game", latest.day, REASONS["trend_drop"],
+                        delta=delta, sessionIds=ids,
+                        previousDeltas=[round(s.delta, 1) for s in previous])
+    if latest.delta <= -BIG_DROP_POINTS:
+        big = _trigger("big_drop", "red", "game", latest.day, REASONS["big_drop"],
+                       delta=delta, sessionIds=ids)
+    return drop, big
 
 
-def _concern_trigger(db: Session, patient_id: str, day: date, window: int = 1) -> Optional[dict]:
+def _mean(xs: list[float]) -> float:
+    return sum(xs) / len(xs)
+
+
+def _subjective_trigger(db: Session, patient_id: str, day: date) -> Optional[dict]:
     rows = db.exec(select(Checkin).where(
         Checkin.patient_id == patient_id, Checkin.day <= day,
-        Checkin.day > day - timedelta(days=window), Checkin.concern == "call"
-    ).order_by(Checkin.day.desc(), Checkin.id.desc())).all()
-    if not rows:
+        Checkin.day > day - timedelta(days=2 * WEEK_DAYS)).order_by(Checkin.day)).all()
+    recent = [c for c in rows if c.day > day - timedelta(days=WEEK_DAYS)]
+    before = [c for c in rows if c.day <= day - timedelta(days=WEEK_DAYS)]
+
+    def change(key: str) -> Optional[float]:
+        r = [c.answers[key] for c in recent if key in c.answers]
+        b = [c.answers[key] for c in before if key in c.answers]
+        if len(r) < MIN_CHECKINS_PER_WEEK or len(b) < MIN_CHECKINS_PER_WEEK:
+            return None
+        return _mean(r) - _mean(b)
+
+    wb, pain = change("wellbeing"), change("pain")
+    worse_wb = wb is not None and wb <= -WELLBEING_DROP_POINTS
+    worse_pain = pain is not None and pain >= PAIN_RISE_POINTS
+    if not (worse_wb or worse_pain):
         return None
-    last = rows[0]
-    return _trigger("concern_call", "yellow", "checkin", last.day,
-                    "Pacient si želi klic zdravnika.",
-                    concernText=last.concern_text, checkinIds=[c.id for c in rows])
+    key = "wellbeing_pain" if worse_wb and worse_pain else "wellbeing" if worse_wb else "pain"
+    return _trigger("subjective_drop", "yellow", "checkin", recent[-1].day, REASONS[key],
+                    wellbeingChange=None if wb is None else round(wb, 2),
+                    painChange=None if pain is None else round(pain, 2),
+                    checkinIds=[c.id for c in recent])
 
 
 def _collect(db: Session, patient: Patient, day: date) -> list[dict]:
-    pathway = db.get(Pathway, patient.pathway_code)
+    drop, big = _game_triggers(db, patient.id, day)
+    subjective = _subjective_trigger(db, patient.id, day)
     out: list[dict] = []
-    warn = _warning_trigger(db, pathway, patient.id, day)
-    drop = _trend_trigger(db, patient.id, day)
-    symptoms = _symptom_triggers(db, pathway, patient, day)
-    concern = _concern_trigger(db, patient.id, day)
-    if warn:
-        out.append(warn)
-    concern_recent = _concern_trigger(db, patient.id, day, CONCURRENT_DAYS)
-    if drop and (symptoms or concern_recent):
-        out.append(_trigger("double_yellow", "red", "game", day,
-                            "Hkrati sta rumena znaka iz igre (trend) in iz dnevnega vnosa.",
-                            delta=drop["extra"].get("delta")))
-    if drop:
-        out.append(drop)
-    out += symptoms
-    if concern:
-        out.append(concern)
+    if drop and subjective:
+        out.append(_trigger("both", "red", "game", max(drop["day"], subjective["day"]), REASONS["both"],
+                            delta=drop["extra"]["delta"],
+                            wellbeingChange=subjective["extra"]["wellbeingChange"],
+                            painChange=subjective["extra"]["painChange"]))
+    out += [t for t in (big, drop, subjective) if t]
     return out
 
 
@@ -204,9 +190,7 @@ def _suppressed(db: Session, patient_id: str, t: dict, day: date) -> bool:
         if t["rule"] not in rules or SEVERITY_RANK[t["severity"]] > SEVERITY_RANK[a.severity]:
             continue
         closed_day = a.closed_at.date()
-        if t["day"] <= closed_day:
-            return True
-        if t["rule"] != "warning_sign" and (day - closed_day).days < SUPPRESS_DAYS_AFTER_CLOSE:
+        if t["day"] <= closed_day or (day - closed_day).days < SUPPRESS_DAYS_AFTER_CLOSE:
             return True
     return False
 
@@ -229,6 +213,9 @@ def _autoclose_grey(db: Session, patient_id: str) -> None:
     db.flush()
 
 
+_LATEST_KEYS = ("delta", "previousDeltas", "wellbeingChange", "painChange", "missedDays")
+
+
 def _merge(db: Session, patient_id: str, day: date, triggers: list[dict]) -> Optional[Alert]:
     triggers = [t for t in triggers if not _suppressed(db, patient_id, t, day)]
     alert = open_alert(db, patient_id)
@@ -244,9 +231,7 @@ def _merge(db: Session, patient_id: str, day: date, triggers: list[dict]) -> Opt
             for k, v in t["extra"].items():
                 if k in ("sessionIds", "checkinIds"):
                     extras[k] = sorted(set(extras.get(k, [])) | set(v))
-                elif k == "warningSigns":
-                    extras[k] = list(dict.fromkeys(extras.get(k, []) + v))
-                elif k in ("delta", "concernText"):
+                elif k in _LATEST_KEYS and (v is not None or k not in extras):
                     extras[k] = v
         now = _stamp(day)
         if alert is None:
@@ -297,6 +282,15 @@ def evaluate_alerts(db: Session, patient_id: str, day: date) -> Optional[Alert]:
     return _merge(db, patient_id, day, triggers)
 
 
+def has_open_game_alert(db: Session, patient_id: str) -> bool:
+    """An open yellow / red alert that comes from the game trend (used by patient feedback)."""
+    a = open_alert(db, patient_id)
+    if a is None or a.severity not in ("yellow", "red"):
+        return False
+    rules = {a.rule} | {x.get("rule") for x in a.evidence.get("triggers", [])}
+    return bool(rules & set(GAME_RULES))
+
+
 def _missing_trigger(db: Session, patient: Patient, day: date) -> Optional[dict]:
     if (day - patient.discharge_date).days < GREY_AFTER_MISSED_DAYS:
         return None
@@ -309,8 +303,7 @@ def _missing_trigger(db: Session, patient: Patient, day: date) -> Optional[dict]
     missed = (day - last).days
     if missed < GREY_AFTER_MISSED_DAYS:
         return None
-    return _trigger("no_data", "grey", "missing", day,
-                    f"Pacient že {missed} dni nima nobenega vnosa ali meritve.", missedDays=missed)
+    return _trigger("no_data", "grey", "missing", day, REASONS["no_data"], missedDays=missed)
 
 
 def sweep(db: Session, day: date) -> None:
@@ -353,10 +346,6 @@ def acknowledge(db: Session, alert_id: int, clinician_id: str, close: bool,
     if note:
         alert.note = note
     alert.updated_at = now
-    if not alert.evidence.get("ackMessageSent"):
-        db.add(Message(patient_id=alert.patient_id, direction="system", author=None,
-                       text=SYSTEM_ACK_TEXT, created_at=now))
-        alert.evidence = {**alert.evidence, "ackMessageSent": True}
     db.add(alert)
     db.commit()
     db.refresh(alert)

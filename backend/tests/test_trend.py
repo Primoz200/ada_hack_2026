@@ -69,24 +69,34 @@ def test_recompute_writes_level_and_combined_rows_one_per_day(db):
     assert len(db.exec(select(TrendSnapshot).where(TrendSnapshot.day == d(4))).all()) == 4
 
 
-def test_combined_ignores_level_not_played_that_day(db):
+def test_combined_carries_the_latest_delta_of_a_level_not_played_that_day(db):
     add_patient(db)
     for i in range(5):
         play_round(db, "p", d(i), 70)
-    # day 5: level 1 drops by 20, level 2 and 3 are not played -> combined = level 1 delta only
+    # day 5: level 1 drops, levels 2 and 3 are not played -> they keep their latest delta (0),
+    # so one level in progress never stands for the whole trend
     play(db, "p", d(5), 55, level=1)
     a = snaps(db, "trace:all")[d(5)]
     l1 = snaps(db, "trace:1")[d(5)]
-    assert a.delta == pytest.approx(l1.delta) and a.delta < 0
+    assert l1.delta < 0
+    assert a.delta == pytest.approx(l1.delta / 3)
     assert d(5) not in snaps(db, "trace:2")
+
+
+def test_combined_skips_levels_without_baseline(db):
+    add_patient(db)
+    for i in range(4):
+        play(db, "p", d(i), 70, level=1)
+    play(db, "p", d(3), 60, level=2)  # level 2: one session, no baseline
+    a = snaps(db, "trace:all")[d(3)]
+    assert a.delta == pytest.approx(snaps(db, "trace:1")[d(3)].delta)
 
 
 def test_aborted_sessions_do_not_count(db):
     add_patient(db)
     play(db, "p", d(0), 70)
-    row, _, extras = play(db, "p", d(1), 0, completed=False)
+    row = play(db, "p", d(1), 0, completed=False)
     assert row.score is None and row.counts_for_trend is False
-    assert extras["compared_to_usual"] == "not_scored"
     assert snaps(db, "trace:1").keys() == {d(0)}
 
 

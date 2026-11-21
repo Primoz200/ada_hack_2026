@@ -68,7 +68,7 @@ def assess_trend(history: list[ScoredSession]) -> TrendResult:
 
 def combined_delta(level_deltas: dict[int, Optional[float]]) -> Optional[float]:
     """Combined trend of one day: mean of per-level deltas (EWMA - own baseline) over the
-    levels that already have a baseline and were played that day. None if there are none."""
+    levels that already have a baseline. None if there are none."""
     vals = [v for v in level_deltas.values() if v is not None]
     return sum(vals) / len(vals) if vals else None
 
@@ -112,7 +112,9 @@ def recompute_trends(db: Session, patient_id: str, game_type: str, day: date) ->
     (metric "<game>:<level>") and the combined one ("<game>:all").
 
     Combined row: baseline/ewma None, n_sessions = number of session-days so far, delta =
-    mean of the per-level deltas of levels with a baseline that were played that day.
+    mean of the current per-level deltas of all levels that have a baseline. A level not
+    played that day contributes its latest delta (v8: so a self-check that is still in
+    progress, e.g. only level 1 done, never shows that one level as the whole trend).
     """
     rows = db.exec(select(GameSession).where(
         GameSession.patient_id == patient_id, GameSession.game_type == game_type,
@@ -122,10 +124,12 @@ def recompute_trends(db: Session, patient_id: str, game_type: str, day: date) ->
     if not levels_today:
         return
     deltas: dict[int, Optional[float]] = {}
-    for level in levels_today:
+    for level in sorted({r.level for r in rows}):
         hist = level_history(db, patient_id, game_type, level, day)
         res = assess_trend(hist)
         deltas[level] = res.delta_vs_baseline
+        if level not in levels_today:
+            continue
         pct = (res.delta_vs_baseline / res.baseline * 100.0
                if res.baseline else None)
         _upsert(db, patient_id, f"{game_type}:{level}", day, n_sessions=res.n_sessions,
