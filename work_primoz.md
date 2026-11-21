@@ -56,3 +56,11 @@
 - Primerjava velikosti CNN (graf `backend/models/data/tracer_training.jpg`, skripta `plot_training.py`): Dropout1d v konvolucijah odpravi preprileganje; manjše mreže (širina 32/16/8, dropout 0,3) se podprilegajo. Privzeto zdaj širina 64, dropout 0,1 → test MAE 6,76 (GBM 6,45). Nadaljnje izboljšave (daljši trening, povprečje GBM+CNN) počakajo na realne podatke.
 - `score_session` (povezava backend ↔ model) bo verjetno naredil Matevž; vse potrebno je v `features.py` (preprocess, extract_features), `common.py` (score_to_class) in `artifacts/` (tracer_gbm.joblib, tracer_cnn.pt). Venv: `~/venvs/ada_models`.
 - **Naslednji korak:** model za CV igro (MediaPipe: odpiranje dlani, abdukcija ramen, dvig rok).
+
+## 2026-11-21 (pozno) — Turri: backend iz ***plain specifikacije (izziv Codeplain)
+
+- **Kaj:** celoten `backend/app` (brez `backend/models/`) zgrajen s turri iz specifikacije `turri/backend.plain` (16 funkcionalnih specifikacij, 8 datotek s scenariji za black-box teste, lastni skripti za teste v `turri/test_scripts/`). Modeli: OpenAI GPT na Amazon Bedrock (`gpt-6-astra` načrtuje, `gpt-6-luna` piše kodo). Ključ je zunaj repozitorija v `~/.config/turri/bedrock.env`, nalaga ga `turri/run.sh`.
+- **Kje:** veja `turri-build` (worktree `.claude/worktrees/turri`), izvoz kode v `backend_turri/`. Turri teče na Linux strani v `~/ada-turri` (na `/mnt/c` bi bil `uv sync` prepočasen).
+- **Potek:** 1. zagon: koraki 1–7 uspešni, korak 8 (replay zgodovine) padel na 120 s limitu, ker je vsak unit test na novo predvajal celo zgodovino → v specifikacijo dodan `APP_SEED_HISTORY=0` za teste, limit 600 s. 2. zagon: vse zgrajeno, conformance testi zeleni.
+- **Primerjava s starim backendom** (54 GET odgovorov pri `APP_TODAY=2026-11-21`, skripte v `~/ada-orig/`): seznam pacientov, poti, ocene, trendi in večina opozoril enaki; agent pa si je izmislil imena polj za home/summary/progress (kljub povezanemu openapi.json) → v specifikacijo vpisana točna polja, okna tednov, vrstni red sprožilcev, semena RNG. 3. zagon teče.
+- **Naučeno:** turri bere samo to, kar je eksplicitno v pravem razdelku; povezan vir (openapi) ni dovolj za imena polj. Popravke delam v `.plain`, nikoli v generirani kodi; turri regenerira le spremenjene specifikacije.
