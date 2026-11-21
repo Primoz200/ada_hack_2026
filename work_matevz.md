@@ -48,3 +48,8 @@
 - Platforma med predstavitvijo ni odprta; funkcionalnost se pokaže v PowerPointu ali na statični spletni strani s posnetki.
 
 **Spremembe v IMPLEMENTATION_PLAN.md:** poglavje 5 (postavitev za teste s kamero, značilke neodvisne od naklona, mera kakovosti kadra), poglavji 12 in 13.
+
+## 2026-11-21 (17.45) — Oblikovalski skilli
+
+**Spremembe:** v `.claude/skills/` ustvarjeni simbolni povezavi `impeccable` in `hallmark` → `.agents/skills/…`, da sta skilla na voljo tako v Codexu kot v Claude Code (`/impeccable`, `/hallmark`).
+**Ključno naučeno:** Claude Code bere skille iz `.claude/skills`, Codex iz `.agents/skills`; simbolna povezava odpravi podvajanje. Zaganjalnik skilla impeccable ob prvi uporabi prenese binarno datoteko.

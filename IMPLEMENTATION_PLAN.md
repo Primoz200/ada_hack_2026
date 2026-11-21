@@ -1,13 +1,13 @@
-# Implementacijski načrt platforme (v5)
+# Implementacijski načrt platforme (v6)
 
-Stanje: v5, 21. 11. 2026 ob 16.45. Usklajen z raziskovalnim poročilom in z Matevževimi odločitvami (telefon in samo dotik, delitev dela, lokalni razvoj, Azure, predstavitev brez dema v živo). Avtor: Matevž + Claude. Odprte točke so zbrane v poglavju 12.
+Stanje: v6, 21. 11. 2026 ob 17.35 (odločitve po pregledu načrta: skupni trend, prst in miška enakovredna, model točkuje le sejo, Primoževa koda v `backend/models/`). Usklajen z raziskovalnim poročilom in z Matevževimi odločitvami (telefon, prst ali miška, delitev dela, lokalni razvoj, Azure, predstavitev brez dema v živo). Avtor: Matevž + Claude. Odprte točke so zbrane v poglavju 12.
 Ozadje in viri: `reports/Platforma za spremljanje pacientov po odpustu.md` (platforma), `RESEARCH.md` (igre), `Daljša predstavitev - Ixtlan Team AdaHack 2026.pdf` (navodila naročnika).
 
 ## 1. Kaj gradiva in zakaj
 
 **En stavek:** spletni portal, ki pri okrevanjih s tveganjem za poslabšanje motorike združi pacientovo kratko dnevno poročilo (subjektivno) s 3-minutnimi igrami, ki merijo gibanje (objektivno), in zdravnika opozori samo takrat, ko se trend glede na pacientovo lastno izhodišče obrne navzdol.
 
-**Naprave:** pacientov del teče na telefonu (brskalnik). Testi z vlečenjem se izvajajo s prstom; **za MVP in posnetke za predstavitev je dovoljena tudi miška** (sledenje na računalniku), zato koda sprejema oba vnosa. Zdravnikov del je namenjen računalniku.
+**Naprave:** pacientov del teče na telefonu (brskalnik). Testi z vlečenjem se izvajajo s prstom ali z miško s pritisnjenim levim gumbom; **vnosa sta enakovredna**, ker preverjata praktično iste sposobnosti, zato gredo seje obeh v isti trend. Zdravnikov del je namenjen računalniku.
 
 **Predstavitev:** dema v živo ne bo in platforma med nastopom ne bo odprta. Funkcionalnost pokaževa nadzorovano, v PowerPointu ali na statični spletni strani, s slikami zaslona in kratkim videom, ki jih posnameva sama. Vse, kar želiva pokazati, mora biti zato delujoče in posneto pred zamrznitvijo.
 
@@ -83,8 +83,9 @@ Znane pasti:
   app/main.py            zagon, statične datoteke, lifespan (seed)
   app/models/            tabele in javni odzivni modeli        (Matevž)
   app/routers/           patients, checkins, sessions, alerts  (Matevž)
-  app/services/alerts.py pravila opozoril, privzeti trend      (Matevž)
-  app/services/scoring/  score_session, assess_trend, modeli   (Primož)
+  app/services/alerts.py pravila opozoril                      (Matevž)
+  app/services/trend.py  assess_trend, skupni trend (pravila, brez modela)  (Matevž)
+  models/                score_session, modeli, generator sintetike, stopnje (Primož; prej vrhnja mapa /models)
   app/seed/              generator sintetičnih pacientov       (Matevž, značilke uskladi s Primožem)
 /frontend/src
   app/                   usmerjanje, postavitev, preklop vlog  (Matevž)
@@ -93,12 +94,14 @@ Znane pasti:
   games/                 trace/, camera/, shared/              (Primož)
   games/_stub/           nadomestna igra                       (Primož)
   client/                generirani tipi, ne urejaj ročno
+/shared/tracer_levels.json   oblike stopenj; bereta igra (frontend) in model (backend)  (Primož)
+/docs/tracer_data_spec.md    Primoževa specifikacija sledenja; ob neskladju velja poglavje 5
 /contracts/openapi.json
 /scripts                 export_openapi.py, dev.sh
 IMPLEMENTATION_PLAN.md, AGENTS.md, DEMO.md
 ```
 
-Pravilo: nihče (ne človek ne agent) ne ureja map drugega. Skupne vroče datoteke (`models/`, registracija routerjev, `routes.tsx`) ureja Matevž.
+Pravilo: nihče (ne človek ne agent) ne ureja map drugega. Skupne vroče datoteke (`app/models/`, registracija routerjev, `routes.tsx`) ureja Matevž. Pozor na imeni: `backend/app/models/` so tabele (Matevž), `backend/models/` je strojno učenje (Primož).
 
 ## 5. Vmesnik med igrami in platformo (dogovor s Primožem v prvi uri)
 
@@ -125,7 +128,7 @@ interface GameResult {
   completed: boolean;       // false, če je pacient prekinil
   series: Record<string, number[]>;   // vsebina je odvisna od igre, glej spodaj
   clientMeta: {
-    inputDevice: "touch" | "mouse" | "camera";  // miška dovoljena za MVP / demo
+    inputDevice: "touch" | "mouse" | "camera";  // prst in miška enakovredna; polje je le metapodatek
     canvasW: number; canvasH: number;   // CSS piksli
     devicePixelRatio: number;
     userAgent: string;
@@ -149,11 +152,11 @@ Stopnje sledenja (fiksne oblike, definirane v `shared/tracer_levels.json`, ki ga
 Pravila zajema:
 - Koordinate so normalizirane na 0–1 glede na platno (ista oblika na vsakem zaslonu); velikost platna je v `clientMeta`. **Platno je kvadratno** (`canvasW == canvasH`), da sta obe osi v enakem merilu; sicer se krog v podatkih pokvari v elipso in razdalje od črte niso primerljive.
 - Ko prst ali miška miruje, brskalnik ne pošilja dogodkov; postanek se vidi kot vrzel v `t` (zato je `t` za vsako točko obvezen). Prevzorčenje naredi model.
-- Prst ali miška: Pointer Events (`pointerdown/move/up`), upoštevajo se dogodki s `pointerType` `"touch"` ali `"mouse"` (pri miški se sled beleži le med držanjem levega gumba). `inputDevice` v `clientMeta` pove, s čim je bila seja narejena; trend primerja le seje z istim vnosom, ker miška in prst nista primerljiva. Na platnu `touch-action: none` in `setPointerCapture`, da stran med risanjem ne drsi.
+- Prst ali miška: Pointer Events (`pointerdown/move/up`), upoštevajo se dogodki s `pointerType` `"touch"` ali `"mouse"` (pri miški se sled beleži le med držanjem levega gumba). `inputDevice` v `clientMeta` pove, s čim je bila seja narejena, vendar je le metapodatek: prst in pritisnjena miška sta enakovredna vnosa in njune seje gredo v isti trend. Na platnu `touch-action: none` in `setPointerCapture`, da stran med risanjem ne drsi.
 - Čas iz `event.timeStamp`; dodatne točke iz `getCoalescedEvents()`, kjer jih brskalnik ponudi. Brez prevzorčenja ali glajenja na odjemalcu: model dobi surovo sled.
 - Dvigi prsta oziroma spusti gumba in prekinitev se zabeležijo, ne zavržejo.
 
-**Backend funkciji, ki ju dostavi Primož**
+**Backend funkciji** (`score_session` dostavi Primož, `assess_trend` je pravilo brez modela pri Matevžu)
 
 ```python
 def score_session(game_type: str, level: int, hand: str,
@@ -163,6 +166,7 @@ def score_session(game_type: str, level: int, hand: str,
     # impairment_class: Literal["normal","mild","moderate","severe"], model_version: str
 
 def assess_trend(history: list[ScoredSession]) -> TrendResult:
+    # BREZ MODELA: izhodišče + EWMA iz shranjenih ocen (poglavje 8).
     # history: VSE pretekle seje iste igre IN iste stopnje za pacienta, urejene po času
     #          (ocene različnih stopenj niso primerljive, zato trend teče ločeno po stopnji)
     #          (datum, trajanje, stopnja, značilke, ocena)
@@ -171,7 +175,9 @@ def assess_trend(history: list[ScoredSession]) -> TrendResult:
     #              delta_vs_baseline: float | None, n_sessions: int, model_version: str
 ```
 
-Platforma ob vsaki novi seji pokliče `score_session`, shrani rezultat, nato pokliče `assess_trend` z vso zgodovino in na izidu uporabi pravila opozoril iz poglavja 8.
+**Delitev (odločitev 21. 11.):** model oceni samo posamezno sejo (en test) iz njene sledi; pacienta in njegove zgodovine ne pozna. Platforma oceno shrani pri pacientu, trend pa se računa iz te zgodovine s pravili, brez modela.
+
+Platforma ob vsaki novi seji pokliče `score_session`, shrani rezultat, nato za vsako stopnjo pokliče `assess_trend`, ločene trende združi v **skupni trend** (poglavje 8) in na njem uporabi pravila opozoril.
 
 Da nihče ne čaka:
 - Primož najprej odda **nadomestno igro**, ki po 3 sekundah vrne vnaprej pripravljen `GameResult`.
@@ -223,18 +229,24 @@ Trend in opozorila se preračunajo sinhrono v istem zahtevku, ki shrani sejo; vr
 
 Privzete vrednosti so inženirska izbira; validiranih pragov za te igre ni in to poveva tudi na odru. Vse so parametri v `alerts.py`.
 
-**Trend igre** (privzeta izvedba `assess_trend`; Primož jo lahko zamenja z modelom, pravila opozoril ostanejo ista)
+**Trend igre** (`assess_trend`, pravilo brez modela, ločeno za vsako stopnjo)
 - **Izhodišče:** prva seja je vaja in se zavrže; izhodišče je mediana sej 2–4. Do takrat je stanje »premalo podatkov«.
 - **Glajenje:** EWMA z utežjo 0,3 na oceni 0–100.
 - **Učinek vaje:** če je mediana najboljših treh od zadnjih sedmih sej višja od izhodišča, se primerja z njo (če ostane čas; sicer samo izhodišče).
 - Ob vsakem trendu piše, na koliko sejah temelji. Manjkajoči dnevi se ne zapolnjujejo.
+
+**Skupni trend** (odločitev 21. 11.: iz ločenih trendov po stopnjah nastane en povprečni trend)
+- Za vsako stopnjo se izračuna odmik EWMA od lastnega izhodišča te stopnje (v točkah).
+- Skupni trend dneva je povprečje teh odmikov po stopnjah, ki že imajo izhodišče in so bile ta dan opravljene. Povpreči se odmik, ne surova ocena, ker imajo stopnje različna izhodišča in ker tako manjkajoča stopnja ne premakne rezultata.
+- Pravila opozoril, mini graf v seznamu, glavni graf pri zdravniku in sporočilo pacientu uporabljajo skupni trend; trendi posameznih stopenj so pri zdravniku v zavihkih.
+- V `trend_snapshot` se shranijo trendi po stopnjah in skupni (`metrika` = `trace:1`, `trace:2`, `trace:3`, `trace:all`).
 
 **Tri stopnje opozoril**
 
 | Stopnja | Sprožilec | Pacient vidi | Zdravnik vidi |
 |---|---|---|---|
 | Rdeča | pritrdilen odgovor na opozorilni znak; ali dve hkratni rumeni (igra + vprašalnik) | kap: celozaslonsko »Takoj pokličite 112«; rana ali padec: »Še danes pokličite ambulanto« | na vrhu seznama; obide logiko trenda |
-| Rumena | EWMA vsaj 10 točk pod izhodiščem v 2 od zadnjih 3 sej; ali bolečina oziroma mravljinčenje vztrajno višje (bolečina +2 ali več glede na prejšnji teden) | nevtralno: »Rezultati so ta teden nekoliko drugačni. Vaš zdravnik jih vidi.« | vrstica z razlogom v enem stavku |
+| Rumena | skupni trend vsaj 10 točk pod izhodiščem v 2 od zadnjih 3 dni s sejo; ali bolečina oziroma mravljinčenje vztrajno višje (bolečina +2 ali več glede na prejšnji teden) | nevtralno: »Rezultati so ta teden nekoliko drugačni. Vaš zdravnik jih vidi.« | vrstica z razlogom v enem stavku |
 | Siva | ni vnosa | samodejni opomnik po 2 izpuščenih dneh | oznaka »brez podatkov« šele po 4 dneh |
 
 **Pravila proti hrupu**
@@ -327,12 +339,12 @@ Mejnik, ki ne sme zdrsniti: **sobota 21.30, navpični rez deluje od konca do kon
 
 ## 12. Odprte točke
 
-Rešeno 21. 11.: Primož dela igre, modele in točkovanje, Matevž platformo; vse teče lokalno; za povzetek imava ključe Azure; Codeplainovega izziva ne rešujeva; pacientov del teče na telefonu, testi s prstom (za MVP/demo tudi z miško na računalniku); dema v živo ni, platformo posnameva in pokaževa v PowerPointu ali na statični strani; pri testih s kamero je telefon naslonjen na mizi, snema sprednja kamera.
+Rešeno 21. 11.: Primož dela igre, modele in točkovanje, Matevž platformo; vse teče lokalno; za povzetek imava ključe Azure; Codeplainovega izziva ne rešujeva; pacientov del teče na telefonu, testi s prstom ali pritisnjeno miško (enakovredna vnosa, isti trend); model točkuje le posamezno sejo, trend se računa iz shranjenih ocen brez modela; iz trendov po stopnjah nastane en skupni povprečni trend; Primoževa koda gre v `backend/models/`; dema v živo ni, platformo posnameva in pokaževa v PowerPointu ali na statični strani; pri testih s kamero je telefon naslonjen na mizi, snema sprednja kamera.
 
 1. **Rok:** 11.00 ali 12.00? Vprašajta organizatorje.
-2. **Kdo izračuna trend?** ~~Odprto~~ Potrjeno (Primož): podpis `assess_trend` drži, vrne tudi smer trenda (izhodišče lastnega pacienta + EWMA / z-vrednost), ločeno po igri in stopnji.
-3. **Oblika surovih podatkov sledenja** (tabela v poglavju 5): ~~Odprto~~ Potrjeno (Primož): ključi `targetX/targetY/t/x/y/strokeId`, normalizacija 0–1 na kvadratnem platnu, stopnje 1–3 iz `shared/tracer_levels.json`. Generator sintetike izpiše isto obliko; za MVP posnema sled miške, sled prsta se doda kasneje.
-4. **Prag 10 točk:** Primož naj iz sintetike sporoči znotrajosebni raztros ocene, da prag ni pod šumom.
+2. **Kdo izračuna trend?** ~~Odprto~~ Rešeno: trend je pravilo brez modela (izhodišče lastnega pacienta + EWMA), ločeno po igri in stopnji, nato povprečen v skupni trend (poglavje 8). Model točkuje samo sejo.
+3. **Oblika surovih podatkov sledenja** (tabela v poglavju 5): ~~Odprto~~ Potrjeno (Primož): ključi `targetX/targetY/t/x/y/strokeId`, normalizacija 0–1 na kvadratnem platnu, stopnje 1–3 iz `shared/tracer_levels.json`. Generator sintetike bo Primož v naslednjem commitu spremenil, da izpiše to obliko (zdaj še staro iz `docs/tracer_data_spec.md`: enote 0–1000, 60 Hz, `down`). Posnema sled miške, kar zadošča, ker sta vnosa enakovredna.
+4. **Prag 10 točk:** Primož naj sporoči, koliko ocena modela niha pri isti resnosti (ponovljeni sintetični poskusi), da prag ni pod šumom. Od tega je odvisno tudi, ali generator pacientov lahko vsak dan ustvari novo sled in jo točkuje, ali pa ocene zapiše neposredno.
 5. **Stopnja igre in trend:** ~~Odprto~~ Potrjeno (Primož): stopnje so fiksne oblike in se ne spreminjajo z napredkom. Model dobi stopnjo kot vhod, trend pa se računa ločeno po stopnji (primerja se le ista stopnja). Ločenega vadbenega kroga ni.
 6. **Igra s kamero na telefonu:** ritem prstov, doseg z ramo ali oboje? Primož naj potrdi, da so značilke neodvisne od naklona in razdalje telefona, in doda mero kakovosti kadra. HTTPS na telefonu preizkusita danes.
 7. **Opozorilni znaki:** ali imata dostop do zdravnika ali mentorja, ki bi potrdil besedilo?
