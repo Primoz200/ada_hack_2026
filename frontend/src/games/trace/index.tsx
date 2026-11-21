@@ -55,7 +55,7 @@ export function TraceGame(props: GameProps) {
   return <TraceCanvas {...props} level={level} />
 }
 
-type Status = 'idle' | 'drawing' | 'lifted' | 'missedStart' | 'done'
+type Status = 'idle' | 'drawing' | 'lifted' | 'missedStart' | 'done' | 'stopped'
 
 function TraceCanvas({ config, onComplete, level }: GameProps & { level: TraceLevel }) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -173,10 +173,27 @@ function TraceCanvas({ config, onComplete, level }: GameProps & { level: TraceLe
       const w = ctx.measureText(text).width / 2 + 4
       const lx = Math.max(w, Math.min(px - w, x * u))
       const ly = y * u - r - 8 < 16 ? y * u + r + 20 : y * u - r - 8
+      // a halo in the card colour keeps the label legible where it crosses the channel
+      ctx.lineJoin = 'round'
+      ctx.lineWidth = 5
+      ctx.strokeStyle = c.card
+      ctx.strokeText(text, lx, ly)
       ctx.fillText(text, lx, ly)
     }
-    if (sameSpot) label('Začetek in konec', sx, sy)
-    else {
+    if (sameSpot) {
+      // start = end (circle): put the label beside the marker, on the inner side, clear of the channel
+      const inward = sx * u > px / 2 ? -1 : 1
+      const text = 'Začetek in konec'
+      const lx = sx * u + inward * (Math.max(r, cw * 0.85) + 12)
+      ctx.textAlign = inward < 0 ? 'right' : 'left'
+      ctx.textBaseline = 'middle'
+      ctx.lineJoin = 'round'
+      ctx.lineWidth = 5
+      ctx.strokeStyle = c.card
+      ctx.strokeText(text, lx, sy * u)
+      ctx.fillText(text, lx, sy * u)
+      ctx.textBaseline = 'alphabetic'
+    } else {
       label('Začetek', sx, sy)
       label('Konec', ex, ey)
     }
@@ -238,7 +255,7 @@ function TraceCanvas({ config, onComplete, level }: GameProps & { level: TraceLe
       const t0 = rec.startedAtStamp
       const durationMs = t0 === undefined ? 0 : completed ? rec.lastT : performance.now() - t0
       const rect = canvasRef.current?.getBoundingClientRect()
-      setStatus('done')
+      setStatus(completed ? 'done' : 'stopped')
       onCompleteRef.current(
         buildResult({
           config,
@@ -323,6 +340,7 @@ function TraceCanvas({ config, onComplete, level }: GameProps & { level: TraceLe
     drawing: 'Sledite poti do konca.',
     lifted: 'Nadaljujte tam, kjer ste ostali.',
     done: 'Končano.',
+    stopped: 'Naloga je ustavljena.',
   }[status]
   const pct = Math.round(fraction * 100)
   // a calm pulse around the start marker until the first press
@@ -381,10 +399,10 @@ function TraceCanvas({ config, onComplete, level }: GameProps & { level: TraceLe
         <p className="text-[1.0625rem] font-medium" aria-live="polite">
           {hint}
         </p>
-        {status === 'done' ? null : (
+        {status === 'done' || status === 'stopped' ? null : (
           <button
             type="button"
-            className="-mr-2 shrink-0 rounded-lg px-2 py-1 text-[0.95rem] text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-primary"
+            className="-my-2 -mr-2 shrink-0 rounded-lg px-2 py-3 text-[0.95rem] text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-primary"
             onClick={() => finish(false, 'cannot_today')}
           >
             Danes ne morem

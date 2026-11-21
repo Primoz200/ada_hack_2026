@@ -145,7 +145,18 @@ interface Frame {
  * Two columns on desktop: the step list with the current instruction (and any status) on the
  * left, the step itself on the right. On a phone the status goes under the step instead.
  */
-function StepLayout({ frame, status, children }: { frame: Frame; status?: React.ReactNode; children: React.ReactNode }) {
+function StepLayout({
+  frame,
+  status,
+  statusKey,
+  children,
+}: {
+  frame: Frame
+  status?: React.ReactNode
+  /** changes whenever the status content changes, so the phone view follows it */
+  statusKey?: string
+  children: React.ReactNode
+}) {
   const step = frame.steps[frame.index]
   const note = <StepNote step={step} hand={frame.hand} />
   // on a phone the status sits under the canvas, often below the fold: bring it into view
@@ -155,7 +166,7 @@ function StepLayout({ frame, status, children }: { frame: Frame; status?: React.
     if (!hasStatus || window.matchMedia('(min-width: 1024px)').matches) return
     const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     phoneStatus.current?.scrollIntoView({ block: 'nearest', behavior: smooth ? 'smooth' : 'auto' })
-  }, [hasStatus])
+  }, [hasStatus, statusKey])
   return (
     <div className="grid gap-7 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-12">
       <aside className="min-w-0">
@@ -349,7 +360,7 @@ function GameStep({
       />
     )
   return (
-    <StepLayout frame={frame} status={status}>
+    <StepLayout frame={frame} status={status} statusKey={phase}>
       <Game key={`${step.key}#${attempt}`} config={config} onComplete={onComplete} onAbort={onDone} />
     </StepLayout>
   )

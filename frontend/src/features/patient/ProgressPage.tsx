@@ -34,7 +34,7 @@ export function ProgressPage() {
         <Panel>
           <PanelSkeleton lines={6} />
         </Panel>
-      ) : data.points.length < 2 ? (
+      ) : data.points.length === 0 ? (
         <EmptyProgress progress={data} />
       ) : (
         <Dashboard progress={data} />
@@ -93,9 +93,15 @@ function Dashboard({ progress: p }: { progress: Progress }) {
             <FeedbackMark tone={p.tone} trend={p.trend} />
           </div>
         </div>
-        <div className="mt-8 -ml-2">
-          <RecoveryChart points={p.points} personalBestDay={p.personalBestDay} height={300} />
-        </div>
+        {p.points.length >= 2 ? (
+          <div className="mt-8 -ml-2">
+            <RecoveryChart points={p.points} personalBestDay={p.personalBestDay} height={300} />
+          </div>
+        ) : (
+          <p className="mt-8 rounded-xl bg-muted p-6 text-muted-foreground">
+            Graf se bo pokazal po naslednjih samopregledih.
+          </p>
+        )}
         <div className="mt-8 space-y-5 border-t border-border pt-7">
           <Week done={p.weekDone} goal={p.weekGoal} />
           {p.clinicianReviewedAt ? <Reviewed at={p.clinicianReviewedAt} /> : null}
