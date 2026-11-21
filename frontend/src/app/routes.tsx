@@ -2,29 +2,26 @@
 import { createBrowserRouter } from 'react-router'
 import { ClinicianPatientPage } from '@/features/clinician/ClinicianPatientPage'
 import { TriagePage } from '@/features/clinician/TriagePage'
-import { CheckinPage } from '@/features/patient/CheckinPage'
-import { GamePage } from '@/features/patient/GamePage'
+import { HomePage } from '@/features/patient/HomePage'
 import { ProgressPage } from '@/features/patient/ProgressPage'
-import { TodayPage } from '@/features/patient/TodayPage'
-import { ClinicianLayout } from './ClinicianLayout'
-import { PatientLayout } from './PatientLayout'
-import { RoleSelectPage } from './RoleSelectPage'
+import { SelfcheckPage } from '@/features/patient/SelfcheckPage'
+import { ClinicianShell, PatientShell } from './AppShell'
+import { RootRedirect } from './RootRedirect'
 
 export const router = createBrowserRouter([
-  { path: '/', element: <RoleSelectPage /> },
+  { path: '/', element: <RootRedirect /> },
   {
     path: '/pacient/:patientId',
-    element: <PatientLayout />,
+    element: <PatientShell />,
     children: [
-      { index: true, element: <TodayPage /> },
-      { path: 'vnos', element: <CheckinPage /> },
-      { path: 'igra/:gameType/:level', element: <GamePage /> },
+      { index: true, element: <HomePage /> },
+      { path: 'samopregled', element: <SelfcheckPage /> },
       { path: 'napredek', element: <ProgressPage /> },
     ],
   },
   {
     path: '/zdravnik',
-    element: <ClinicianLayout />,
+    element: <ClinicianShell />,
     children: [
       { index: true, element: <TriagePage /> },
       { path: 'pacient/:patientId', element: <ClinicianPatientPage /> },

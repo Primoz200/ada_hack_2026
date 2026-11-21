@@ -1,13 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Hanken Grotesk', ui-sans-serif, system-ui, sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -46,85 +45,121 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    /* product tokens (see DESIGN.md) */
+    --radius-panel: 1.75rem;
+    --color-brand: var(--brand);
+    --color-brand-ink: var(--brand-ink);
+    --color-cta: var(--cta);
+    --color-cta-hover: var(--cta-hover);
+    --color-status-red: var(--status-red);
+    --color-status-red-bg: var(--status-red-bg);
+    --color-status-amber: var(--status-amber);
+    --color-status-amber-bg: var(--status-amber-bg);
+    --color-status-grey: var(--status-grey);
+    --color-status-grey-bg: var(--status-grey-bg);
+    --shadow-panel: 0 18px 40px -24px rgb(39 71 90 / 0.28);
+}
+
+/* Hanken Grotesk (variable, self-hosted): the grotesk of Slovenian public e-health portals */
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/hanken-grotesk-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/hanken-grotesk-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    /* surfaces: a cool blue-grey page under white panels */
+    --background: #edf1f4;
+    --foreground: #1b2328;
+    --card: #ffffff;
+    --card-foreground: #1b2328;
+    --popover: #ffffff;
+    --popover-foreground: #1b2328;
+    /* slate blue: links, fields, default actions */
+    --primary: #3d6880;
+    --primary-foreground: #ffffff;
+    --secondary: #e3eaef;
+    --secondary-foreground: #27475a;
+    --muted: #f2f5f7;
+    --muted-foreground: #566772;
+    --accent: #e6eef3;
+    --accent-foreground: #27475a;
+    --destructive: #b3261e;
+    --border: #d5dee5;
+    --input: #8aa3b3;
+    --ring: #3d6880;
+    --chart-1: #3d6880;
+    --chart-2: #4c8f2f;
+    --chart-3: #c9403b;
+    --chart-4: #8aa3b3;
+    --chart-5: #1b2328;
+    --radius: 0.5rem;
+    /* brand green: emphasis words, positive marks. --brand-ink for small text. */
+    --brand: #4c8f2f;
+    --brand-ink: #3c7624;
+    /* the one hero action on the patient side */
+    --cta: #c9403b;
+    --cta-hover: #b23632;
+    /* clinician status colours; red and amber appear nowhere else on clinician screens */
+    --status-red: #a3231c;
+    --status-red-bg: #fdecea;
+    --status-amber: #7a5200;
+    --status-amber-bg: #fff3d1;
+    --status-grey: #4d5d68;
+    --status-grey-bg: #e7edf1;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #1b2328;
+    --sidebar-primary: #3d6880;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #e6eef3;
+    --sidebar-accent-foreground: #27475a;
+    --sidebar-border: #d5dee5;
+    --sidebar-ring: #3d6880;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
-    }
+    color-scheme: light;
+    scrollbar-color: #b8c6d0 transparent;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-size: 1.0625rem;
+    line-height: 1.55;
+    letter-spacing: 0.005em;
+  }
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 22%, white);
+    color: var(--foreground);
+  }
+  :focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--ring) 55%, transparent);
+    outline-offset: 2px;
+  }
+  a {
+    text-underline-offset: 0.2em;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
 }
