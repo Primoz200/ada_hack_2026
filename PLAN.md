@@ -2,15 +2,15 @@
 
 ### Smernice podjetja Ixtlan za hackathon ADAHACK 2026 [https://hack.klub-ada.si/en]
 
-Izziv se osredotoča na razvoj digitalnega sistema, ki pacientom omogoča preprosto poročanje o počutju in zdravstvenem stanju, 
+Izziv se osredotoča na razvoj digitalnega sistema, ki pacientom omogoča preprosto poročanje o počutju in zdravstvenem stanju,
 zdravstvenemu osebju pa pomaga pravočasno prepoznati morebitne zaplete in ukrepati.
 
 ## Rešitev naše ekipe
 
-Načrt je izdelati spletni portal za spremljanje zdravstvenega stanja pacientov po odpustitvi iz bolnišnične oskrbe, 
-s tem da je pozornost namenjena pacientom pri katerih je možno poslabšanje motoričnih  (gibalnih) sposobnosti.
+Načrt je izdelati spletni portal za spremljanje zdravstvenega stanja pacientov po odpustitvi iz bolnišnične oskrbe,
+s tem da je pozornost namenjena pacientom pri katerih je možno poslabšanje motoričnih (gibalnih) sposobnosti.
 
-Tukaj predvsem ciljava na paciente, ki okrevajo po možganski kapi, paciente ki okrevajo po operaciji karpalnega tunela, 
+Tukaj predvsem ciljava na paciente, ki okrevajo po možganski kapi, paciente ki okrevajo po operaciji karpalnega tunela,
 pacienti na onkološkem oddelku pri katerih lahko nastanejo komplikacije kot so periferna nevropatija zaradi kemoterapije (CIPN).
 
 ### Pridobljeni podatki
@@ -31,22 +31,19 @@ ne nujno vidna iz dneva v dan zato je še posebaj pomembno da se stanje spremlja
 in se tako čim prej obvesti zdravnika specialista, ki ima ustrezno znanje in zna pravilno razpolagati z vsemi informacijami, ki jih
 ima na voljo. Hkrati lahko spremljamo napredek pacientov, zdravnik lahko na hitro pogleda podatke, in ocene napredka na podlagi machine learning modelov.
 
-#### Pridobitev čim bolj reprezentativnih in objektivnih podatkov
+#### Monitoring po sami izpustitvi iz bolnišnice
+Pregledi po možganski kapi so veliko bolj pogosti in intezivni kot po operaciji karpalnega kanala, kjer je schedeuled monitoring
+navadno le kratek čas po sami operaciji in to navadno za odstranitev šivov in splošen pregled in za tem šele če pacient sam presodi, da mora obiskati zdravnika.
+
+Pri vsaki bolezni, stanju ali poškodbi, kjer je pričakovano poslabšanje motoričnih funkcij, je zelo pomembna rehabilitacija in čim
+hitrejša in učinkovita vadba, da do degradacije spretnosti ne pride.
+
+Ker so časovna obdobja od obiska do obiska vedno daljša in če se stanje počasi in postopno slabša ni nujno da bom pacient to opazil.
+Ljudje težko zaznamo majhne spremembe v daljšem časovnem obdobju zato je pomembno, da zdravniki dobijo tekoče podatke brez da
+po nepotrebnem delamo gnečo v zdravstevnih domovih in bolnišnicah, ki že tako trpijo zaradi prenatrpanosti.
+
+Idealno bi bilo da zdravniki ne bi imeli preveč dodatnega dela s pregledom podatkov nabranih tekom okrevanja
+izven bolnišnice (doma; v domači oskrbi) ampak bi bili obveščeni če se v okrevanju kaže nek negativni trend - na primer.
+iz dneva v dan se rezultati testov za fino motorične spretnosti slabšajo - prvi dan izgledajo vredu oziroma niso najboljši ampak je to pričakovano nato pa je začetna izbolšava stanja ki se nato počasi preobrne.
 
 
-Namesto subjektivnih lestvic pacient doma igra kratke igre, ki objektivno merijo motorične sposobnosti (čas, natančnost,
-gladkost giba, tremor, obseg giba). Samoocena na lestvici 0–10 se je v primerjavi s skritim pospeškomerom izkazala za
-neveljavno in nezanesljivo (Nicolson 2018), igre, dodane običajni terapiji, pa izboljšajo funkcijo roke (Cochrane 2025, SMD 0,42).
-Podrobni dokazi, viri in parametri so v [RESEARCH.md](RESEARCH.md).
-
-**Tri igre (MVP najprej z miško, telefon kasneje):**
-1. **Sledi poti (tracing + Fittsovo ciljanje)** – črta → krog → spirala → labirint. Meri čas, RMS odstopanje od poti,
-   gladkost (jerk/SPARC), throughput. Kap (metrike dosega ~ Fugl-Meyer), CTS (spirala + SVM: 82 % sens., 71 % spec.).
-2. **MediaPipe kamera** – »ritem prstov« (tapping palec–kazalec, MediaPipe Hands) in »doseži zvezde«
-   (abdukcija ramena, kompenzacija trupa, simetrija; MediaPipe Pose). ICC 0,75–0,96, absolutni koti manj natančni → % lastnega izhodišča.
-3. **Telefon kot krmilnik (DeviceOrientation/Motion)** – zapestni »sef« (ROM po CTR), »drži kozarec« (tremor 3–12 Hz),
-   »ravnotežni surfer« (nihanje pri CIPN) + tapping podtest. Wow: QR koda → telefon postane krmilnik. Rezerva: tapping na dotik.
-
-**ML:** sintetični podatki iz pravil (+ preverjanje na javnih nizih UCI spirale, KIMORE), baseline na značilkah + 1D-CNN,
-izhod ocena 0–100 + razred (normalno/blago/zmerno/hudo), nivo kot vhod. Glavni klinični signal je **trend glede na
-pacientovo lastno izhodišče** (z-vrednost / RCI, EWMA), ker se rezultati med ljudmi zelo razlikujejo.
