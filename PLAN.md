@@ -32,6 +32,7 @@ in se tako čim prej obvesti zdravnika specialista, ki ima ustrezno znanje in zn
 ima na voljo. Hkrati lahko spremljamo napredek pacientov, zdravnik lahko na hitro pogleda podatke, in ocene napredka na podlagi machine learning modelov.
 
 #### Monitoring po sami izpustitvi iz bolnišnice
+
 Pregledi po možganski kapi so veliko bolj pogosti in intezivni kot po operaciji karpalnega kanala, kjer je schedeuled monitoring
 navadno le kratek čas po sami operaciji in to navadno za odstranitev šivov in splošen pregled in za tem šele če pacient sam presodi, da mora obiskati zdravnika.
 
@@ -46,4 +47,7 @@ Idealno bi bilo da zdravniki ne bi imeli preveč dodatnega dela s pregledom poda
 izven bolnišnice (doma; v domači oskrbi) ampak bi bili obveščeni če se v okrevanju kaže nek negativni trend - na primer.
 iz dneva v dan se rezultati testov za fino motorične spretnosti slabšajo - prvi dan izgledajo vredu oziroma niso najboljši ampak je to pričakovano nato pa je začetna izbolšava stanja ki se nato počasi preobrne.
 
+#### Pridobitev čim bolj reprezentativnih in objektivnih podatkov
 
+Način pridobivanja podatkov od pacientov, ki okrevajo doma mora biti zabavne oziroma nagrajujoče narave - ne sme jim vzeti preveč časa
+vsak dan, saj jih to lahko odvrne od sodelovanja ali pa začnejo preprosto pozabljati in tako nastanejo luknje v podatkih in napovedi oziroma trendi niso več tako natančni.
