@@ -55,6 +55,15 @@ export function joinAnd(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} in ${items[items.length - 1]}`
 }
 
+/** "2 kratki vaji", "3 kratke vaje", "5 kratkih vaj" (Slovenian dual and plural). */
+export function exercisesPhrase(n: number): string {
+  const mod = n % 100
+  if (mod === 1) return `${n} kratka vaja`
+  if (mod === 2) return `${n} kratki vaji`
+  if (mod === 3 || mod === 4) return `${n} kratke vaje`
+  return `${n} kratkih vaj`
+}
+
 /** "4 od 7 dni" */
 export function daysOf(done: number, total: number): string {
   return `${done} od ${total} dni`

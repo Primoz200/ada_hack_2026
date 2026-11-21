@@ -48,7 +48,7 @@ class Checkin(SQLModel, table=True):
 class GameSession(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     patient_id: str = Field(foreign_key="patient.id", index=True)
-    game_type: str  # "trace" | "camera_tapping" | "camera_reach" | "motion"
+    game_type: str  # "trace" | "camera"
     level: int
     hand: str
     started_at: datetime
@@ -63,13 +63,15 @@ class GameSession(SQLModel, table=True):
     features: dict[str, float] = Field(default_factory=dict, sa_column=Column(JSON))
     # False for aborted / low quality sessions: stored but excluded from the trend
     counts_for_trend: bool = True
+    # camera sessions: capture quality from the scorer (detection rate, frame rate); None for trace
+    quality_ok: Optional[bool] = None
 
 
 class SessionRaw(SQLModel, table=True):
     """Raw time series, kept out of GameSession so list queries never load them."""
 
     session_id: int = Field(primary_key=True, foreign_key="gamesession.id")
-    series: dict[str, list[float]] = Field(default_factory=dict, sa_column=Column(JSON))
+    series: dict[str, list[Optional[float]]] = Field(default_factory=dict, sa_column=Column(JSON))
     client_meta: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
 

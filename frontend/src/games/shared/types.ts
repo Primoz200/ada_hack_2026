@@ -2,7 +2,7 @@
 // Shared hot file: changing it changes the contract with the backend (SessionIn).
 import type { ComponentType } from 'react'
 
-export type GameType = 'trace' | 'camera_tapping' | 'camera_reach' | 'motion'
+export type GameType = 'trace' | 'camera'
 export type Hand = 'left' | 'right'
 export type InputDevice = 'touch' | 'mouse' | 'camera'
 
@@ -26,14 +26,19 @@ export interface GameResult {
   completed: boolean
   /** e.g. "cannot_today" | "time_limit" when completed is false */
   abortReason?: string
-  /** trace: targetX, targetY, t, x, y, strokeId (coordinates normalised 0-1 on a square canvas) */
-  series: Record<string, number[]>
+  /**
+   * trace: targetX, targetY, t, x, y, strokeId (coordinates normalised 0-1 on a square canvas).
+   * camera: t, lm{i}_x/_y/_z, w{i}_x/_y/_z, lm{i}_v, handScore, handMatch, cueT (null = no detection in that frame).
+   */
+  series: Record<string, (number | null)[]>
   clientMeta: {
     inputDevice: InputDevice
     canvasW: number
     canvasH: number
     devicePixelRatio: number
     userAgent: string
+    /** camera sessions add videoW, videoH, fpsMeasured, mediapipe, detector, delegate, mirroredPreview */
+    [extra: string]: unknown
   }
 }
 

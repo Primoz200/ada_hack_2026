@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/camera/exercises": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Exercises */
+        get: operations["listCameraExercises"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/checkins": {
         parameters: {
             query?: never;
@@ -325,6 +342,39 @@ export interface components {
             updatedAt: string;
         };
         /**
+         * CameraExercise
+         * @description Cue timeline of one camera exercise (single source of truth: backend/models/camera/exercises.py).
+         *     Cues are at first_cue_s + k * cue_period_s, k = 0..n_cues-1; the time before the first cue is the
+         *     rest pose. hand: cue = hand fully open. arms: cue = "up", held for up_s, then "down".
+         */
+        CameraExercise: {
+            /** Cueperiods */
+            cuePeriodS: number;
+            /**
+             * Detector
+             * @enum {string}
+             */
+            detector: "hand" | "pose";
+            /** Durations */
+            durationS: number;
+            /** Firstcues */
+            firstCueS: number;
+            /** Instructions */
+            instructions: string;
+            /** Key */
+            key: string;
+            /** Level */
+            level: number;
+            /** Ncues */
+            nCues: number;
+            /** Name */
+            name: string;
+            /** Openwindows */
+            openWindowS?: number | null;
+            /** Ups */
+            upS?: number | null;
+        };
+        /**
          * CheckinIn
          * @description The two ratings at the start of a self-check.
          */
@@ -380,6 +430,8 @@ export interface components {
              * @default
              */
             userAgent: string;
+        } & {
+            [key: string]: unknown;
         };
         /** ClinicianOut */
         ClinicianOut: {
@@ -389,6 +441,28 @@ export interface components {
             name: string;
             /** Role */
             role: string;
+        };
+        /**
+         * GameProgress
+         * @description One game's own trend for the patient. Tracing and camera exercises are shown separately.
+         */
+        GameProgress: {
+            /**
+             * Gametype
+             * @enum {string}
+             */
+            gameType: "trace" | "camera";
+            /** Personalbestday */
+            personalBestDay: string | null;
+            /** Points */
+            points: components["schemas"]["ProgressPoint"][];
+            /** Title */
+            title: string;
+            /**
+             * Trend
+             * @enum {string}
+             */
+            trend: "improving" | "stable" | "declining" | "unknown";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -424,9 +498,14 @@ export interface components {
              * Gametype
              * @enum {string}
              */
-            gameType: "trace" | "camera_tapping" | "camera_reach" | "motion";
+            gameType: "trace" | "camera";
             /** Levels */
             levels: number[];
+            /**
+             * Optionallevels
+             * @default []
+             */
+            optionalLevels: number[];
             /** Title */
             title: string;
         };
@@ -511,6 +590,8 @@ export interface components {
         };
         /** PatientListItem */
         PatientListItem: {
+            /** Camerasparkline */
+            cameraSparkline: components["schemas"]["SparkPoint"][];
             /** Dayssincedischarge */
             daysSinceDischarge: number;
             /** Daystonextvisit */
@@ -582,12 +663,10 @@ export interface components {
         ProgressOut: {
             /** Clinicianreviewedat */
             clinicianReviewedAt: string | null;
+            /** Games */
+            games: components["schemas"]["GameProgress"][];
             /** Patientid */
             patientId: string;
-            /** Personalbestday */
-            personalBestDay: string | null;
-            /** Points */
-            points: components["schemas"]["ProgressPoint"][];
             /** Ratings */
             ratings: components["schemas"]["RatingPoint"][];
             /** Text */
@@ -684,8 +763,10 @@ export interface components {
         SelfcheckStep: {
             /** Done */
             done: boolean;
+            /** Durations */
+            durationS?: number | null;
             /** Gametype */
-            gameType?: ("trace" | "camera_tapping" | "camera_reach" | "motion") | null;
+            gameType?: ("trace" | "camera") | null;
             /** Id */
             id: string;
             /**
@@ -695,6 +776,11 @@ export interface components {
             kind: "ratings" | "game";
             /** Level */
             level?: number | null;
+            /**
+             * Skippable
+             * @default false
+             */
+            skippable: boolean;
             /** Title */
             title: string;
         };
@@ -708,14 +794,14 @@ export interface components {
              * Format: date
              */
             day: string;
+            /** Games */
+            games: components["schemas"]["GameProgress"][];
             /** Levelsdone */
             levelsDone: number;
             /** Levelstotal */
             levelsTotal: number;
             /** Patientid */
             patientId: string;
-            /** Points */
-            points: components["schemas"]["ProgressPoint"][];
             /** Text */
             text: string;
             /** Title */
@@ -747,7 +833,7 @@ export interface components {
              * Gametype
              * @enum {string}
              */
-            gameType: "trace" | "camera_tapping" | "camera_reach" | "motion";
+            gameType: "trace" | "camera";
             /**
              * Hand
              * @enum {string}
@@ -759,7 +845,7 @@ export interface components {
             patientId: string;
             /** Series */
             series: {
-                [key: string]: number[];
+                [key: string]: (number | null)[];
             };
             /**
              * Startedat
@@ -782,7 +868,7 @@ export interface components {
              * Gametype
              * @enum {string}
              */
-            gameType: "trace" | "camera_tapping" | "camera_reach" | "motion";
+            gameType: "trace" | "camera";
             /** Level */
             level: number;
             /** Patientid */
@@ -791,7 +877,7 @@ export interface components {
             score: number | null;
             /** Series */
             series: {
-                [key: string]: number[];
+                [key: string]: (number | null)[];
             };
             /** Sessionid */
             sessionId: number;
@@ -829,7 +915,7 @@ export interface components {
              * Gametype
              * @enum {string}
              */
-            gameType: "trace" | "camera_tapping" | "camera_reach" | "motion";
+            gameType: "trace" | "camera";
             /**
              * Hand
              * @enum {string}
@@ -848,6 +934,8 @@ export interface components {
             level: number;
             /** Modelversion */
             modelVersion: string | null;
+            /** Qualityok */
+            qualityOk: boolean | null;
             /** Score */
             score: number | null;
             /** Startedat */
@@ -1028,6 +1116,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listCameraExercises: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CameraExercise"][];
                 };
             };
         };

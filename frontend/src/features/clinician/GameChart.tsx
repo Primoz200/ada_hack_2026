@@ -1,4 +1,5 @@
-// Game chart: combined trend (points vs own baseline) or one level (sessions as faded dots, EWMA line, baseline band).
+// Game chart for one measurement (tracing or camera exercises): combined trend (points vs own baseline)
+// or one level (sessions as faded dots, EWMA line, baseline band). Poor-quality camera sessions are hollow grey dots.
 // Shares its x axis (time, same domain, same margins) with the rating charts below.
 import { CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine, Scatter, Tooltip, XAxis, YAxis } from 'recharts'
 import type { SessionSummary, Timeline } from '@/client/api'
@@ -6,15 +7,18 @@ import { useChartWidth } from './useChartWidth'
 import {
   ALERT_THRESHOLD,
   BAND,
-  LEVEL_NAMES,
   chartMarkers,
   combinedRows,
   dayTicks,
   deltaWords,
   formatDay,
+  gameMetric,
+  gameSessions,
   latestBaseline,
+  levelName,
   levelRows,
   type ChartRow,
+  type Game,
   type TimeDomain,
 } from './model'
 import { AXIS_LABEL_STYLE, AXIS_TICK, CHART_MARGIN, Y_AXIS_WIDTH, markerStyle, shortDay } from './chartLayout'
@@ -37,8 +41,26 @@ export function regionWord(score: number | null | undefined): string {
   return REGIONS.find((r) => score >= r.y1)?.label ?? REGIONS[3].label
 }
 
+/** A session that does not count (poor capture quality): hollow, grey, still clickable. */
+export function PoorDot({ cx, cy, selected, onClick }: { cx: number; cy: number; selected?: boolean; onClick?: () => void }) {
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={selected ? 6.5 : 4.5}
+      fill="var(--card)"
+      stroke="var(--status-grey)"
+      strokeWidth={selected ? 2.25 : 1.5}
+      strokeDasharray={selected ? undefined : '2 1.5'}
+      style={onClick ? { cursor: 'pointer' } : undefined}
+      onClick={onClick}
+    />
+  )
+}
+
 interface Props {
   timeline: Timeline
+  game?: Game
   view: View
   domain: TimeDomain
   selectedId: number | null
@@ -46,21 +68,26 @@ interface Props {
   height?: number
 }
 
-export function GameChart({ timeline, view, domain, selectedId, onSelectSession, height = 320 }: Props) {
+export function GameChart({ timeline, game = 'trace', view, domain, selectedId, onSelectSession, height = 320 }: Props) {
   const [ref, width] = useChartWidth()
   const markers = chartMarkers(timeline, domain)
   const ticks = dayTicks(domain)
   const isAll = view === 'all'
-  const rows: ChartRow[] = isAll ? combinedRows(timeline.trends) : levelRows(view, timeline.sessions, timeline.trends)
-  const baseline = isAll ? 0 : latestBaseline(timeline.trends, `trace:${view}`)
-  const hasData = rows.some((r) => (isAll ? r.delta != null : r.ewma != null || r.score != null))
+  const sessions = gameSessions(timeline.sessions, game)
+  const rawRows: ChartRow[] = isAll ? combinedRows(timeline.trends, game, sessions) : levelRows(view, sessions, timeline.trends, game)
+  const baseline = isAll ? 0 : latestBaseline(timeline.trends, gameMetric(game, view))
+  const hasData = rawRows.some((r) => (isAll ? r.delta != null : r.ewma != null || r.score != null))
 
-  const vals = rows.map((r) => r.delta).filter((v): v is number => v != null)
+  const vals = rawRows.map((r) => r.delta).filter((v): v is number => v != null)
   // fixed floor and ceiling, widened only when the data goes beyond them
   const yDomain: [number, number] = isAll
     ? [Math.min(-25, Math.floor(Math.min(...vals, 0) / 5) * 5 - 5), Math.max(15, Math.ceil(Math.max(...vals, 0) / 5) * 5 + 5)]
     : [0, 100]
-  const byId = new Map(timeline.sessions.map((s) => [s.id, s]))
+  // on the combined chart a poor-quality session has no place on the points axis: a lane along the bottom
+  const rows = isAll ? rawRows.map((r) => (r.poor != null ? { ...r, poor: yDomain[0] + 2 } : r)) : rawRows
+  const hasPoor = rows.some((r) => r.poor != null)
+  const byId = new Map(sessions.map((s) => [s.id, s]))
+  const gameWord = game === 'camera' ? 'vaj s kamero' : 'sledenja'
 
   return (
     <div ref={ref} className="relative w-full" style={{ height }} data-testid="game-chart">
@@ -104,7 +131,8 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
                 y={r.y1}
                 stroke="none"
                 ifOverflow="hidden"
-                label={{ value: r.label, position: 'insideBottomRight', fontSize: 13, fill: 'var(--muted-foreground)', dy: -2, ...HALO }}
+                // with poor-quality sessions, the lowest label moves above the bottom lane where they are drawn
+                label={{ value: r.label, position: 'insideBottomRight', fontSize: 13, fill: 'var(--muted-foreground)', dy: r.y1 === 0 && hasPoor ? -18 : -2, ...HALO }}
               />
             ))}
 
@@ -155,11 +183,17 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
               return (
                 <div className="rounded-lg border bg-popover px-3 py-2 text-[0.875rem] shadow-panel">
                   <div className="font-semibold">{formatDay(r.t)}</div>
-                  {isAll && r.delta != null && <div>Skupni trend: {deltaWords(r.delta)}</div>}
+                  {isAll && r.delta != null && <div>Skupni trend {gameWord}: {deltaWords(r.delta)}</div>}
                   {!isAll && r.ewma != null && <div>Glajen rezultat: {regionWord(r.ewma)}</div>}
-                  {s && (
+                  {s && r.poor != null && (
                     <div>
-                      Seja: {regionWord(s.score)} ({Math.round(s.score ?? 0)} od 100)
+                      {levelName(game, s.level)}: slaba kakovost zajema, seja ne šteje v trend
+                    </div>
+                  )}
+                  {s && r.poor == null && s.score != null && (
+                    <div>
+                      {isAll ? '' : 'Seja: '}
+                      {regionWord(s.score)} ({Math.round(s.score)} od 100)
                     </div>
                   )}
                 </div>
@@ -216,11 +250,29 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
               />
             </>
           )}
+
+          {hasPoor && (
+            <Scatter
+              dataKey="poor"
+              name="Slaba kakovost zajema"
+              isAnimationActive={false}
+              shape={(p: { cx?: number; cy?: number; payload?: ChartRow }) => {
+                if (p.cx == null || p.cy == null || p.payload?.poor == null) return <g />
+                const sel = p.payload.sessionId === selectedId
+                const s = p.payload.sessionId != null ? byId.get(p.payload.sessionId) : undefined
+                return <PoorDot cx={p.cx} cy={p.cy} selected={sel} onClick={() => s && onSelectSession(s)} />
+              }}
+            />
+          )}
         </ComposedChart>
       )}
       {!hasData && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center pl-16 text-[0.9375rem] text-muted-foreground">
-          <span className="rounded-lg bg-card px-3 py-1.5">{isAll ? 'Skupnega trenda še ni: najprej se mora oblikovati izhodišče.' : `Za stopnjo »${LEVEL_NAMES[view]}« še ni sej.`}</span>
+          <span className="rounded-lg bg-card px-3 py-1.5">
+            {isAll
+              ? 'Skupnega trenda še ni: najprej se mora oblikovati izhodišče.'
+              : `Za ${game === 'camera' ? 'vajo' : 'stopnjo'} »${levelName(game, view)}« še ni sej.`}
+          </span>
         </div>
       )}
     </div>

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "backend/models/camera/recorder/index.html"
+        ],
+        "createdAt": "2026-11-21T21:27:22.866Z",
+        "reason": "orchestrator decided: teammate's internal recording tool merged from the compvis branch, not a product screen; his folder is not ours to edit"
+      }
+    ]
+  }
+}

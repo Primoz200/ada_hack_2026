@@ -34,6 +34,13 @@ En slab dan pri stabilnem pacientu ne sproži ničesar; pri pacientu, ki že nek
 
 **Omejitev, ki jo poveva na odru:** prototip pacienta nikoli ne usmeri po pomoč. To je zavestna poenostavitev za predstavitev; v pravem izdelku bi nujna navodila določil klinik.
 
+## v8.1: vaje s kamero (21. 11. pozno zvečer)
+
+- Primoževe vaje s kamero (`backend/models/camera/`, točkovanje s pravili glede na zdravo referenco, brez modela) so zadnji del samopregleda: **Dlan** (21 s) je prva, **Roke v stran** in **Dvig rok** (po 42 s) lahko pacient preskoči. Brez kamere ali dovoljenja se vaje s kamero preskočijo.
+- Tip igre je `camera`, stopnje 1–3. Brskalnik pošlje surove točke gibanja (MediaPipe Hands / Pose), videa ne.
+- **Več meritev, ne ena:** sledenje in vaje s kamero imata ločena trenda (`trace:*`, `camera:*`) in ločen prikaz pri pacientu in zdravniku. Pravilo `trend_drop` se ovrednoti za vsako posebej; opozorilo pove, katera meritev pada. Pacient brez podatkov kamere se spremlja samo s sledenjem.
+- Glavni potek dema ostane na sledenju (površno sledenje pri Ivanu → »Za pregled«).
+
 ## 1. Kaj gradiva in zakaj
 
 **En stavek:** spletni portal, ki pri okrevanjih s tveganjem za poslabšanje motorike združi pacientovo kratko dnevno poročilo (subjektivno) s 3-minutnimi igrami, ki merijo gibanje (objektivno), in zdravnika opozori samo takrat, ko se trend glede na pacientovo lastno izhodišče obrne navzdol.

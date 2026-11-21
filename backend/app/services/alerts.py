@@ -3,28 +3,38 @@
 v8: alerts are the clinician's business only; the patient never sees them and is never
 prompted to call anyone. All thresholds are parameters here. Rules (evaluated as of a `day`):
 
-* yellow trend_drop       the latest combined trend (trace:all delta) <= -TREND_DROP_POINTS
+* yellow trend_drop       PER GAME (tracing "trace", camera exercises "camera"): the latest
+                          combined trend of that game (<game>:all delta) <= -TREND_DROP_POINTS
                           AND on at least PREVIOUS_DAYS_HIT of the previous PREVIOUS_DAYS_WINDOW
-                          session-days the delta was <= -BELOW_BAND_POINTS (outside the
-                          baseline band). One bad day of a stable patient opens nothing; a
-                          patient who has been drifting below baseline tips over.
+                          session-days of that game the delta was <= -BELOW_BAND_POINTS
+                          (outside the baseline band). One bad day of a stable patient opens
+                          nothing; a patient who has been drifting below baseline tips over.
 * yellow subjective_drop  7-day mean of `wellbeing` >= WELLBEING_DROP_POINTS lower than the
                           7 days before, OR 7-day mean of `pain` >= PAIN_RISE_POINTS higher.
                           Each week needs MIN_CHECKINS_PER_WEEK check-ins.
-* red    both             trend_drop and subjective_drop hold at the same time
-* red    big_drop         the latest combined delta <= -BIG_DROP_POINTS
+* red    both             a trend_drop of ANY game and subjective_drop hold at the same time
+                          (one trigger per dropping game)
+* red    big_drop         PER GAME: the latest combined delta <= -BIG_DROP_POINTS
 * grey   no_data          no check-in and no session for GREY_AFTER_MISSED_DAYS days (sweep);
                           closes by itself once data arrives
 
+Several measurements are followed: every game-trend trigger carries `game`, and a patient
+without camera data is simply followed on tracing only.
+
 Anti-noise: exactly one open (status != closed) alert per patient. New triggers are appended
-to evidence["triggers"]; severity / rule / reason escalate to the most severe trigger.
+to evidence["triggers"]; severity / rule / reason escalate to the most severe trigger. The
+reason of a game alert names the measurements of the episode (every game that had a
+trend trigger in this alert): tracing, camera exercises or both. evidence["games"] holds
+{game: {"delta"}} for the games whose trend rule holds at the latest evaluation that had any,
+evidence["delta"] the worst of them.
 
 "Same episode" (no re-fire after the clinician closed an alert): a trigger is suppressed when
-a clinician-closed alert of that patient contains the same rule, the trigger is not more
-severe than that alert, and either the trigger concerns data up to the closing day or the
-closing was less than SUPPRESS_DAYS_AFTER_CLOSE days ago. Acknowledged-but-open alerts
-simply keep collecting triggers (no new alert); if one is escalated to a worse severity it
-returns to "new" so the clinician sees it again.
+a clinician-closed alert of that patient contains the same rule FOR THE SAME GAME, the
+trigger is not more severe than that alert, and either the trigger concerns data up to the
+closing day or the closing was less than SUPPRESS_DAYS_AFTER_CLOSE days ago. So closing a
+tracing alert does not silence a later camera drop. Acknowledged-but-open alerts simply keep
+collecting triggers (no new alert); if one is escalated to a worse severity it returns to
+"new" so the clinician sees it again.
 
 Reasons are one short Slovenian sentence without numbers; the numbers are in `evidence`.
 """
@@ -35,6 +45,7 @@ from sqlmodel import Session, select
 
 from app.models import Alert, Checkin, Clinician, GameSession, Patient, TrendSnapshot
 from app.services import clock, divergence
+from app.services.trend import GAMES
 
 TREND_DROP_POINTS = 10.0  # latest combined trend at least this far below baseline ...
 BELOW_BAND_POINTS = 5.0  # ... and outside the baseline band (<= -5) ...
@@ -57,6 +68,24 @@ REASONS = {
     "wellbeing_pain": "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden.",
     "no_data": "Pacient že več dni nima nobenega vnosa ali meritve.",
 }
+
+# game-trend sentences by (rule, the games concerned in GAMES order)
+GAME_REASONS = {
+    ("trend_drop", ("trace",)): REASONS["trend_drop"],
+    ("trend_drop", ("camera",)): "Rezultati vaj s kamero so že več dni pod pacientovim izhodiščem.",
+    ("trend_drop", ("trace", "camera")): "Padajo rezultati sledenja in vaj s kamero.",
+    ("big_drop", ("trace",)): REASONS["big_drop"],
+    ("big_drop", ("camera",)): "Rezultati vaj s kamero so močno padli pod pacientovo izhodišče.",
+    ("big_drop", ("trace", "camera")): "Rezultati sledenja in vaj s kamero so močno padli pod pacientovo izhodišče.",
+    ("both", ("trace",)): REASONS["both"],
+    ("both", ("camera",)): "Padajo rezultati meritev in počutje hkrati.",
+    ("both", ("trace", "camera")): "Padajo rezultati meritev in počutje hkrati.",
+}
+
+
+def game_reason(rule: str, games) -> str:
+    key = tuple(g for g in GAMES if g in set(games)) or ("trace",)
+    return GAME_REASONS[(rule, key)]
 
 OUTCOME_LABELS = {
     "called_reassured": "Poklical, pomiril",
@@ -93,44 +122,55 @@ def _stamp(day: date) -> datetime:
     return clock.now() if day == clock.today() else clock.at(day, 12)
 
 
-def _trigger(rule: str, severity: str, source: str, day: date, reason: str, **extra: Any) -> dict:
+def _trigger(rule: str, severity: str, source: str, day: date, reason: str,
+             game: Optional[str] = None, **extra: Any) -> dict:
     return {"rule": rule, "severity": severity, "source": source, "day": day, "reason": reason,
-            "extra": extra}
+            "game": game, "extra": extra}
+
+
+def _trigger_key(x: dict) -> tuple:
+    """(rule, game) of a trigger or a stored trigger entry; stored game-rule entries from
+    before camera exercises existed have no game and are tracing."""
+    rule, game = x.get("rule"), x.get("game")
+    if rule in GAME_RULES and not game:
+        game = "trace"
+    return rule, game
 
 
 # ------------------------------------------------------------------ rule evaluation
 
-def _combined(db: Session, patient_id: str, day: date, n: int) -> list[TrendSnapshot]:
-    """The last n trace:all snapshots with a delta up to `day`, newest first."""
+def _combined(db: Session, patient_id: str, day: date, n: int, game: str = "trace") -> list[TrendSnapshot]:
+    """The last n <game>:all snapshots with a delta up to `day`, newest first."""
     return list(db.exec(select(TrendSnapshot).where(
-        TrendSnapshot.patient_id == patient_id, TrendSnapshot.metric == "trace:all",
+        TrendSnapshot.patient_id == patient_id, TrendSnapshot.metric == f"{game}:all",
         TrendSnapshot.day <= day, TrendSnapshot.delta != None  # noqa: E711
     ).order_by(TrendSnapshot.day.desc()).limit(n)).all())
 
 
-def _session_ids(db: Session, patient_id: str, days: list[date]) -> list[int]:
+def _session_ids(db: Session, patient_id: str, days: list[date], game: str = "trace") -> list[int]:
     return list(db.exec(select(GameSession.id).where(
-        GameSession.patient_id == patient_id, GameSession.game_type == "trace",
+        GameSession.patient_id == patient_id, GameSession.game_type == game,
         GameSession.day.in_(days), GameSession.counts_for_trend == True)).all())  # noqa: E712
 
 
-def _game_triggers(db: Session, patient_id: str, day: date) -> tuple[Optional[dict], Optional[dict]]:
-    """(trend_drop, big_drop) triggers, each None when the rule does not hold."""
-    snaps = _combined(db, patient_id, day, PREVIOUS_DAYS_WINDOW + 1)
+def _game_triggers(db: Session, patient_id: str, day: date,
+                   game: str = "trace") -> tuple[Optional[dict], Optional[dict]]:
+    """(trend_drop, big_drop) triggers of one game, each None when the rule does not hold."""
+    snaps = _combined(db, patient_id, day, PREVIOUS_DAYS_WINDOW + 1, game)
     if not snaps:
         return None, None
     latest, previous = snaps[0], snaps[1:]
-    ids = _session_ids(db, patient_id, [s.day for s in snaps])
+    ids = _session_ids(db, patient_id, [s.day for s in snaps], game)
     delta = round(latest.delta, 1)
     drop = big = None
     hits = sum(1 for s in previous if s.delta <= -BELOW_BAND_POINTS)
     if latest.delta <= -TREND_DROP_POINTS and hits >= PREVIOUS_DAYS_HIT:
-        drop = _trigger("trend_drop", "yellow", "game", latest.day, REASONS["trend_drop"],
-                        delta=delta, sessionIds=ids,
+        drop = _trigger("trend_drop", "yellow", "game", latest.day, game_reason("trend_drop", [game]),
+                        game=game, delta=delta, sessionIds=ids,
                         previousDeltas=[round(s.delta, 1) for s in previous])
     if latest.delta <= -BIG_DROP_POINTS:
-        big = _trigger("big_drop", "red", "game", latest.day, REASONS["big_drop"],
-                       delta=delta, sessionIds=ids)
+        big = _trigger("big_drop", "red", "game", latest.day, game_reason("big_drop", [game]),
+                       game=game, delta=delta, sessionIds=ids)
     return drop, big
 
 
@@ -165,15 +205,25 @@ def _subjective_trigger(db: Session, patient_id: str, day: date) -> Optional[dic
 
 
 def _collect(db: Session, patient: Patient, day: date) -> list[dict]:
-    drop, big = _game_triggers(db, patient.id, day)
+    """All triggers that hold as of `day`. Game triggers of the worst game come first, so at
+    equal severity the alert follows the game that dropped most."""
+    drops, bigs = [], []
+    for game in GAMES:
+        drop, big = _game_triggers(db, patient.id, day, game)
+        drops += [drop] if drop else []
+        bigs += [big] if big else []
+    drops.sort(key=lambda t: t["extra"]["delta"])
+    bigs.sort(key=lambda t: t["extra"]["delta"])
     subjective = _subjective_trigger(db, patient.id, day)
     out: list[dict] = []
-    if drop and subjective:
-        out.append(_trigger("both", "red", "game", max(drop["day"], subjective["day"]), REASONS["both"],
-                            delta=drop["extra"]["delta"],
-                            wellbeingChange=subjective["extra"]["wellbeingChange"],
-                            painChange=subjective["extra"]["painChange"]))
-    out += [t for t in (big, drop, subjective) if t]
+    if subjective:
+        for drop in drops:
+            out.append(_trigger("both", "red", "game", max(drop["day"], subjective["day"]),
+                                game_reason("both", [drop["game"]]), game=drop["game"],
+                                delta=drop["extra"]["delta"],
+                                wellbeingChange=subjective["extra"]["wellbeingChange"],
+                                painChange=subjective["extra"]["painChange"]))
+    out += bigs + drops + ([subjective] if subjective else [])
     return out
 
 
@@ -186,8 +236,9 @@ def _suppressed(db: Session, patient_id: str, t: dict, day: date) -> bool:
     for a in closed:
         if a.closed_by == "system":  # automatic closure of a grey alert is not a clinician decision
             continue
-        rules = {a.rule} | {x.get("rule") for x in a.evidence.get("triggers", [])}
-        if t["rule"] not in rules or SEVERITY_RANK[t["severity"]] > SEVERITY_RANK[a.severity]:
+        # same rule for the same game: closing a tracing alert does not silence a camera drop
+        keys = {_trigger_key(x) for x in a.evidence.get("triggers", [])} or {_trigger_key({"rule": a.rule})}
+        if _trigger_key(t) not in keys or SEVERITY_RANK[t["severity"]] > SEVERITY_RANK[a.severity]:
             continue
         closed_day = a.closed_at.date()
         if t["day"] <= closed_day or (day - closed_day).days < SUPPRESS_DAYS_AFTER_CLOSE:
@@ -213,7 +264,34 @@ def _autoclose_grey(db: Session, patient_id: str) -> None:
     db.flush()
 
 
-_LATEST_KEYS = ("delta", "previousDeltas", "wellbeingChange", "painChange", "missedDays")
+_LATEST_KEYS = ("wellbeingChange", "painChange", "missedDays")
+
+
+def _game_evidence(live: list[dict]) -> dict[str, Any]:
+    """games / delta / previousDeltas from the live game-trend triggers (rebuilt on every
+    evaluation that has any, so a game that recovered drops out of `games`)."""
+    games: dict[str, dict] = {}
+    previous: dict[str, list] = {}
+    for t in live:
+        if t["rule"] in GAME_RULES and t["game"]:
+            games[t["game"]] = {"delta": t["extra"]["delta"]}
+            if "previousDeltas" in t["extra"]:
+                previous[t["game"]] = t["extra"]["previousDeltas"]
+    if not games:
+        return {}
+    worst = min(games, key=lambda g: games[g]["delta"])
+    out: dict[str, Any] = {"games": {g: games[g] for g in GAMES if g in games}, "delta": games[worst]["delta"]}
+    if worst in previous:
+        out["previousDeltas"] = previous[worst]
+    return out
+
+
+def _entry(t: dict) -> dict:
+    e = {"rule": t["rule"], "severity": t["severity"], "source": t["source"],
+         "day": t["day"].isoformat(), "reason": t["reason"]}
+    if t["game"]:
+        e["game"] = t["game"]
+    return e
 
 
 def _merge(db: Session, patient_id: str, day: date, triggers: list[dict]) -> Optional[Alert]:
@@ -221,19 +299,18 @@ def _merge(db: Session, patient_id: str, day: date, triggers: list[dict]) -> Opt
     alert = open_alert(db, patient_id)
     triggers = live
     if alert is not None:
-        seen = {(x.get("rule"), x.get("day")) for x in alert.evidence.get("triggers", [])}
-        triggers = [t for t in live if (t["rule"], t["day"].isoformat()) not in seen]
+        seen = {(*_trigger_key(x), x.get("day")) for x in alert.evidence.get("triggers", [])}
+        triggers = [t for t in live if (*_trigger_key(t), t["day"].isoformat()) not in seen]
     # numbers and ids come from every live trigger, so the evidence follows the latest data of
     # the day (e.g. all three sessions of a self-check), while trigger entries are appended once
-    extras: dict[str, Any] = {}
+    extras: dict[str, Any] = _game_evidence(live)
     for t in live:
         for k, v in t["extra"].items():
             if k in ("sessionIds", "checkinIds"):
                 extras[k] = sorted(set(extras.get(k, [])) | set(v))
             elif k in _LATEST_KEYS and (v is not None or k not in extras):
                 extras[k] = v
-    entries = [{"rule": t["rule"], "severity": t["severity"], "source": t["source"],
-                "day": t["day"].isoformat(), "reason": t["reason"]} for t in triggers]
+    entries = [_entry(t) for t in triggers]
     if triggers:
         top = max(triggers, key=_priority)  # first of the most severe
         now = _stamp(day)
@@ -258,6 +335,14 @@ def _merge(db: Session, patient_id: str, day: date, triggers: list[dict]) -> Opt
             ev[k] = v
         if ev != alert.evidence:
             alert.evidence = ev
+            db.add(alert)
+            db.flush()
+    if alert is not None and alert.rule in GAME_RULES:
+        # the sentence names every measurement of this episode (tracing, camera or both)
+        games = {_trigger_key(x)[1] for x in alert.evidence.get("triggers", []) if x.get("rule") in GAME_RULES}
+        reason = game_reason(alert.rule, games)
+        if reason != alert.reason:
+            alert.reason = reason
             db.add(alert)
             db.flush()
     if alert is not None:
@@ -292,6 +377,14 @@ def has_open_game_alert(db: Session, patient_id: str) -> bool:
         return False
     rules = {a.rule} | {x.get("rule") for x in a.evidence.get("triggers", [])}
     return bool(rules & set(GAME_RULES))
+
+
+def open_alert_games(db: Session, patient_id: str) -> set[str]:
+    """Games with a trend trigger in the open yellow / red alert (patient feedback per game)."""
+    a = open_alert(db, patient_id)
+    if a is None or a.severity not in ("yellow", "red"):
+        return set()
+    return {_trigger_key(x)[1] for x in a.evidence.get("triggers", []) if x.get("rule") in GAME_RULES}
 
 
 def _missing_trigger(db: Session, patient: Patient, day: date) -> Optional[dict]:

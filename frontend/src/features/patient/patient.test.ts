@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SelfcheckStep } from '@/client/api'
-import { firstName, joinAnd, longDate, parseDay, relativeDay } from './format'
-import { buildWizard, isPartlyDone, startIndex } from './wizard'
+import { exercisesPhrase, firstName, joinAnd, longDate, parseDay, relativeDay } from './format'
+import { buildWizard, isPartlyDone, previewItems, skipGame, startIndex } from './wizard'
 
 const steps = (done: boolean[]): SelfcheckStep[] =>
   [
@@ -11,6 +11,18 @@ const steps = (done: boolean[]): SelfcheckStep[] =>
     { id: 'trace:3', kind: 'game', title: 'Labirint', gameType: 'trace', level: 3 },
   ].map((s, i) => ({ ...s, done: done[i] }) as SelfcheckStep)
 
+const camera = (done: boolean[]): SelfcheckStep[] =>
+  (['Dlan', 'Roke v stran', 'Dvig rok'] as const).map((title, i) => ({
+    id: `camera:${i + 1}`,
+    kind: 'game',
+    title,
+    gameType: 'camera',
+    level: i + 1,
+    done: done[i],
+    skippable: i > 0,
+    durationS: i === 0 ? 21 : 42,
+  }))
+
 describe('wizard steps', () => {
   it('appends the result step and keeps the API order', () => {
     const w = buildWizard(steps([false, false, false, false]))
@@ -19,9 +31,27 @@ describe('wizard steps', () => {
   })
 
   it('takes a new game type without code changes', () => {
-    const s = [...steps([true, true, true, true]), { id: 'camera_tapping:1', kind: 'game', title: 'Gibanje roke', gameType: 'camera_tapping', level: 1, done: false } as SelfcheckStep]
-    expect(buildWizard(s)[4]).toMatchObject({ kind: 'game', gameType: 'camera_tapping' })
+    const s = [...steps([true, true, true, true]), ...camera([false, false, false])]
+    expect(buildWizard(s)[4]).toMatchObject({ kind: 'game', gameType: 'camera', skippable: false, durationS: 21 })
+    expect(buildWizard(s)[5]).toMatchObject({ skippable: true, durationS: 42 })
     expect(startIndex(s)).toBe(4)
+  })
+
+  it('without a camera skips every remaining camera step and goes on', () => {
+    const w = buildWizard([...steps([false, false, false, false]), ...camera([false, false, false])])
+    expect(skipGame(w, 4)).toEqual({ skipped: ['camera:1', 'camera:2', 'camera:3'], next: 7 })
+    expect(skipGame(w, 5)).toEqual({ skipped: ['camera:2', 'camera:3'], next: 7 })
+    expect(w[7].kind).toBe('result')
+    // a step after the camera steps is not lost
+    const later = buildWizard([...camera([false, false, false]), ...steps([false, false, false, false])])
+    expect(skipGame(later, 0)).toMatchObject({ next: 3 })
+  })
+
+  it('shows the camera exercises as one tile on Domov', () => {
+    const items = previewItems([...steps([true, false, false, false]), ...camera([true, false, false])])
+    expect(items.map((i) => i.key)).toEqual(['ratings', 'trace:1', 'trace:2', 'trace:3', 'camera'])
+    expect(items[4]).toMatchObject({ kind: 'group', title: 'Vaje s kamero', count: 3, done: true })
+    expect(items[0]).toMatchObject({ kind: 'step', done: true })
   })
 
   it('skips a game step without a game type', () => {
@@ -61,5 +91,11 @@ describe('wording', () => {
   it('joins with "in"', () => {
     expect(joinAnd(['Ravna črta', 'Krog', 'Labirint'])).toBe('Ravna črta, Krog in Labirint')
     expect(joinAnd(['Krog'])).toBe('Krog')
+  })
+
+  it('counts exercises in Slovenian', () => {
+    expect(exercisesPhrase(2)).toBe('2 kratki vaji')
+    expect(exercisesPhrase(3)).toBe('3 kratke vaje')
+    expect(exercisesPhrase(5)).toBe('5 kratkih vaj')
   })
 })

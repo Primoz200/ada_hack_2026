@@ -23,29 +23,35 @@ def ingest_session(db: Session, data: SessionIn, *, day: Optional[date] = None,
                    created_at: Optional[datetime] = None,
                    preset_score: Optional[ScoreResult] = None) -> GameSession:
     """Store raw data, score, recompute trends, evaluate alerts. Returns the stored row
-    (row.score is None for an aborted attempt: stored, not scored, not in the trend).
+    (row.score is None for an aborted attempt, a camera recording of poor capture quality or
+    one that could not be scored: stored with its raw series, not in the trend).
 
     day / created_at: override "today" (seed replay). preset_score: the seed passes a
-    score from its story curve instead of scoring the trace. A repeated session of the
-    same level on the same day is stored too and both count.
+    score from its story curve instead of scoring the recording (ScoreResult.quality_ok
+    sets GameSession.quality_ok, e.g. True for seeded camera sessions). A repeated session
+    of the same level on the same day is stored too and both count.
     """
     day = day or clock.today()
+    # extra client keys (camera: videoW, videoH, fpsMeasured, detector ...) are kept: the camera
+    # scorer reads them and they are stored with the raw series
     meta = data.client_meta.model_dump(by_alias=True)
-    scored = data.completed
     result = None
-    if scored:
+    if data.completed:
         result = preset_score or scoring.score_session(
             data.game_type, data.level, data.hand, data.duration_ms, data.series, meta)
+    # aborted, poor capture quality (camera) or not scorable: stored, not in the trend
+    scored = result is not None and result.score is not None and result.quality_ok is not False
     row = GameSession(
         patient_id=data.patient_id, game_type=data.game_type, level=data.level, hand=data.hand,
         started_at=created_at or _aware(data.started_at), day=day,
         duration_ms=data.duration_ms, completed=data.completed, abort_reason=data.abort_reason,
         input_device=data.client_meta.input_device,
-        score=result.score if result else None,
-        impairment_class=result.impairment_class if result else None,
+        score=result.score if scored else None,
+        impairment_class=result.impairment_class if scored else None,
         model_version=result.model_version if result else None,
         features=result.features if result else {},
         counts_for_trend=scored,
+        quality_ok=result.quality_ok if result else None,
     )
     db.add(row)
     db.flush()

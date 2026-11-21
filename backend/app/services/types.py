@@ -10,9 +10,12 @@ Direction = Literal["improving", "stable", "declining", "insufficient_data"]
 @dataclass
 class ScoreResult:
     features: dict[str, float]
-    score: float  # 0-100
-    impairment_class: ImpairmentClass
+    score: Optional[float]  # 0-100; None = not scorable (camera: no reference, scorer failed)
+    impairment_class: Optional[ImpairmentClass]
     model_version: str
+    # camera: capture quality from the scorer (detection rate, frame rate); None for trace.
+    # False -> stored, but no score and not in the trend.
+    quality_ok: Optional[bool] = None
 
 
 @dataclass

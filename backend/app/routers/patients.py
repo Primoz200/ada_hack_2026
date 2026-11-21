@@ -7,12 +7,12 @@ from sqlmodel import select
 from app.deps import Db, require_patient
 from app.models import Alert, Checkin, GameSession, Pathway, Patient, TrendSnapshot
 from app.models.schemas import (
-    CheckinOut, PatientDetail, PatientHomeOut, PatientListItem, PatientListOut, PatientSummary, ProgressOut,
-    ProgressPoint, RatingPoint, SelfcheckStep, SelfcheckSummary, SessionSummary, SparkPoint, TimelineOut,
-    TrendPoint, TriageCounters,
+    CheckinOut, GameProgress, PatientDetail, PatientHomeOut, PatientListItem, PatientListOut, PatientSummary,
+    ProgressOut, ProgressPoint, RatingPoint, SelfcheckStep, SelfcheckSummary, SessionSummary, SparkPoint,
+    TimelineOut, TrendPoint, TriageCounters,
 )
-from app.seed.pathways import LEVEL_TITLES
-from app.services import alerts, clock, feedback, queries
+from app.seed.pathways import GAME_TITLES, LEVEL_TITLES
+from app.services import alerts, clock, feedback, queries, scoring
 
 RATINGS_TITLE = "Počutje in bolečina"
 SUMMARY_DAYS = 14
@@ -39,6 +39,8 @@ def list_patients(db: Db):
             side=p.side, days_since_discharge=(today - p.discharge_date).days, status=st.status,
             reason=st.reason, diverging=st.diverging,
             game_sparkline=[SparkPoint(day=d, value=v) for d, v in queries.game_sparkline(db, p.id, today)],
+            camera_sparkline=[SparkPoint(day=d, value=v)
+                              for d, v in queries.game_sparkline(db, p.id, today, game="camera")],
             wellbeing_sparkline=[SparkPoint(day=d, value=v)
                                  for d, v in queries.wellbeing_sparkline(db, p.id, today)],
             days_to_next_visit=(p.next_visit_date - today).days if p.next_visit_date else None,
@@ -98,18 +100,39 @@ def _points(snaps) -> list[ProgressPoint]:
     return [ProgressPoint(day=s.day, value=round(s.delta, 1), label=_label(s.delta)) for s in snaps]
 
 
+def _games(db, p: Patient, today, since=None) -> list[GameProgress]:
+    """Each game's own trend for the patient, tracing first; only games with trend points.
+    since: first day of the points shown (the personal best is over the whole history)."""
+    per_game = feedback.points_by_game(db, p.id, today)
+    trends = feedback.game_trends(db, p.id, today, per_game)
+    out = []
+    for game, snaps in per_game.items():
+        best = max(snaps, key=lambda s: (s.delta, s.day))
+        shown = [s for s in snaps if since is None or s.day >= since]
+        out.append(GameProgress(game_type=game, title=GAME_TITLES.get(game, game), trend=trends[game],
+                                points=_points(shown), personal_best_day=best.day))
+    return out
+
+
 def _steps(db, p: Patient, today) -> list[SelfcheckStep]:
     pathway = db.get(Pathway, p.pathway_code)
     has_checkin = db.exec(select(Checkin.id).where(Checkin.patient_id == p.id,
                                                    Checkin.day == today)).first() is not None
     steps = [SelfcheckStep(id="ratings", kind="ratings", title=RATINGS_TITLE, done=has_checkin)]
     done = queries.completed_levels(db, p.id, today)
-    for game_type, level in queries.pathway_levels(pathway):
+    for game_type, level, skippable in queries.pathway_levels(pathway):
         steps.append(SelfcheckStep(
             id=f"{game_type}:{level}", kind="game", game_type=game_type, level=level,
             title=LEVEL_TITLES.get((game_type, level), f"Stopnja {level}"),
-            done=(game_type, level) in done))
+            done=(game_type, level) in done, skippable=skippable,
+            duration_s=scoring.camera_duration_s(level) if game_type == "camera" else None))
     return steps
+
+
+def _selfcheck_done(steps: list[SelfcheckStep]) -> bool:
+    """Ratings and every tracing level; camera steps never block completion (no camera, no
+    permission and skipped exercises are all fine)."""
+    return all(s.done for s in steps if s.game_type != "camera")
 
 
 @router.get("/{patient_id}/home", response_model=PatientHomeOut, operation_id="getPatientHome")
@@ -123,7 +146,7 @@ def get_home(patient_id: str, db: Db):
     return PatientHomeOut(
         patient_id=p.id, name=p.name, pathway_code=p.pathway_code,
         pathway_name=db.get(Pathway, p.pathway_code).name, hand=p.side, today=today, steps=steps,
-        selfcheck_done_today=all(s.done for s in steps), last_selfcheck_day=max(days, default=None))
+        selfcheck_done_today=_selfcheck_done(steps), last_selfcheck_day=max(days, default=None))
 
 
 @router.get("/{patient_id}/selfcheck/summary", response_model=SelfcheckSummary,
@@ -133,12 +156,12 @@ def get_selfcheck_summary(patient_id: str, db: Db):
     p = require_patient(db, patient_id)
     today = clock.today()
     fb = feedback.feedback_for(db, p.id, today)
-    games = [s for s in _steps(db, p, today) if s.kind == "game"]
+    game_steps = [s for s in _steps(db, p, today) if s.kind == "game"]
     since = today - timedelta(days=SUMMARY_DAYS - 1)
-    snaps = [s for s in feedback.combined_points(db, p.id, today) if s.day >= since]
     return SelfcheckSummary(
         tone=fb.tone, trend=fb.trend, title=fb.title, text=fb.text, patient_id=p.id, day=today,
-        levels_done=sum(1 for s in games if s.done), levels_total=len(games), points=_points(snaps))
+        levels_done=sum(1 for s in game_steps if s.done), levels_total=len(game_steps),
+        games=_games(db, p, today, since))
 
 
 @router.get("/{patient_id}/progress", response_model=ProgressOut, operation_id="getProgress")
@@ -147,13 +170,11 @@ def get_progress(patient_id: str, db: Db):
     p = require_patient(db, patient_id)
     today = clock.today()
     fb = feedback.feedback_for(db, p.id, today)
-    snaps = feedback.combined_points(db, p.id, today)
-    best = max(snaps, key=lambda s: (s.delta, s.day), default=None)
     s_days, c_days, _, _ = queries.entry_days(db, p.id)
     ratings = [RatingPoint(day=c.day, wellbeing=c.answers.get("wellbeing"), pain=c.answers.get("pain"))
                for c in queries.checkins_of(db, p.id, today)]
     return ProgressOut(
         tone=fb.tone, trend=fb.trend, title=fb.title, text=fb.text, patient_id=p.id,
-        points=_points(snaps), ratings=ratings, personal_best_day=best.day if best else None,
+        games=_games(db, p, today), ratings=ratings,
         week_done=queries.days_with_entry(s_days | c_days, today, 7), week_goal=WEEK_GOAL,
         clinician_reviewed_at=queries.latest_review(db, p.id))

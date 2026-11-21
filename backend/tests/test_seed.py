@@ -13,6 +13,8 @@ from app.services import clock
 
 from .conftest import TODAY
 
+BELOW_BAND = 5.0  # app.services.alerts.BELOW_BAND_POINTS
+
 
 @pytest.fixture(scope="module")
 def seeded_engine():
@@ -70,9 +72,9 @@ def _alerts(client, pid):
     return client.get(f"/api/patients/{pid}/timeline").json()["alerts"]
 
 
-def _combined(client, pid):
+def _combined(client, pid, game="trace"):
     tl = client.get(f"/api/patients/{pid}/timeline").json()
-    return [t for t in tl["trends"] if t["metric"] == "trace:all" and t["delta"] is not None]
+    return [t for t in tl["trends"] if t["metric"] == f"{game}:all" and t["delta"] is not None]
 
 
 def test_patient_ids_today_and_default(client):
@@ -107,15 +109,77 @@ def test_p3_main_demo_patient_at_reset(client):
     assert home["selfcheckDoneToday"] is False and home["lastSelfcheckDay"] == yesterday
 
 
+def test_p3_camera_a_few_points_below_baseline_without_alert(client):
+    cam = [t["delta"] for t in _combined(client, "p3", "camera")]
+    assert -6 <= cam[-1] <= -3  # slightly below its own baseline at reset
+    assert min(cam) > -BELOW_BAND  # never outside the baseline band: no camera alert, ever
+    assert max(cam) >= 2  # recovered first, like the tracing
+    tl = client.get("/api/patients/p3/timeline").json()
+    sessions = [s for s in tl["sessions"] if s["gameType"] == "camera"]
+    trace_days = {s["day"] for s in tl["sessions"] if s["gameType"] == "trace"}
+    by_level = {lv: {s["day"] for s in sessions if s["level"] == lv} for lv in (1, 2, 3)}
+    assert all(days == trace_days for days in by_level.values())  # all three levels, every self-check day
+    assert all(s["qualityOk"] is True and s["countsForTrend"] and s["inputDevice"] == "camera" for s in sessions)
+    # the camera trend does not touch status, reason or the tracing summary
+    detail = client.get("/api/patients/p3").json()
+    assert detail["summary"]["combinedDelta"] == pytest.approx(_combined(client, "p3")[-1]["delta"])
+    p3 = _by_id(client)["p3"]
+    assert p3["cameraSparkline"][-1]["value"] == pytest.approx(cam[-1])
+    games = client.get("/api/patients/p3/progress").json()["games"]
+    assert [g["gameType"] for g in games] == ["trace", "camera"]
+    assert games[1]["title"] == "Vaje s kamero" and games[1]["trend"] != "declining"
+
+
+def test_seeded_camera_sessions_have_no_fake_landmarks(client):
+    tl = client.get("/api/patients/p1/timeline").json()
+    s = next(x for x in tl["sessions"] if x["gameType"] == "camera" and x["level"] == 1)
+    assert 80 <= s["score"] <= 100 and {"open_level", "fist_level", "n_reps", "part_position"} <= set(s["features"])
+    arm = next(x for x in tl["sessions"] if x["gameType"] == "camera" and x["level"] == 2)
+    assert {"top_level", "rest_level", "n_reps", "lean_deg"} <= set(arm["features"])
+    raw = client.get(f"/api/sessions/{s['id']}/raw").json()
+    assert raw["series"] == {} and raw["clientMeta"]["videoW"] == 1280 and raw["clientMeta"]["inputDevice"] == "camera"
+
+
 def test_p4_red_both_open_before_today(client):
     assert _by_id(client)["p4"]["status"] == "red"
     detail = client.get("/api/patients/p4").json()
     a = detail["openAlert"]
     assert (a["severity"], a["rule"]) == ("red", "both")
     assert a["openedDay"] < TODAY.isoformat()
-    assert a["evidence"]["delta"] <= -10 and a["evidence"]["painChange"] >= 2
-    assert a["evidence"]["delta"] == round(_combined(client, "p4")[-1]["delta"], 1)
+    ev = a["evidence"]
+    assert ev["delta"] <= -10 and ev["painChange"] >= 2
+    # both measurements drop: each game with its own delta, `delta` is the worst of them
+    trace, camera = _combined(client, "p4")[-1]["delta"], _combined(client, "p4", "camera")[-1]["delta"]
+    assert ev["games"] == {"trace": {"delta": round(trace, 1)}, "camera": {"delta": round(camera, 1)}}
+    assert ev["delta"] == min(round(trace, 1), round(camera, 1))
+    assert camera <= -10
+    assert {t.get("game") for t in ev["triggers"] if t["rule"] == "trend_drop"} == {"trace", "camera"}
+    assert a["reason"] == "Padajo rezultati meritev in počutje hkrati."
     assert detail["nextVisitDate"] is None
+    assert _by_id(client)["p4"]["cameraSparkline"][-1]["value"] == pytest.approx(camera)
+
+
+def test_p2_past_camera_only_alert_closed_as_data_problem(client):
+    [a] = _alerts(client, "p2")
+    assert (a["rule"], a["severity"], a["status"], a["source"]) == ("trend_drop", "yellow", "closed", "game")
+    assert a["outcome"] == "false_alarm" and a["note"] and a["closedBy"] == "dr. Ana Novak"
+    assert a["reason"] == "Rezultati vaj s kamero so že več dni pod pacientovim izhodiščem."
+    assert {t["game"] for t in a["evidence"]["triggers"]} == {"camera"} and set(a["evidence"]["games"]) == {"camera"}
+    assert min(t["delta"] for t in _combined(client, "p2")) > -BELOW_BAND  # tracing never dropped
+    assert abs(_combined(client, "p2", "camera")[-1]["delta"]) < 5  # recovered, no re-fire
+    assert _by_id(client)["p2"]["status"] == "stable"
+
+
+def test_tracing_only_patients_have_no_camera_data(client):
+    ps = _by_id(client)
+    for pid in ("p8", "demo"):
+        tl = client.get(f"/api/patients/{pid}/timeline").json()
+        assert tl["sessions"] and all(s["gameType"] == "trace" for s in tl["sessions"]), pid
+        assert not any(t["metric"].startswith("camera") for t in tl["trends"]), pid
+        assert ps[pid]["cameraSparkline"] == [] and ps[pid]["gameSparkline"], pid
+        assert [g["gameType"] for g in client.get(f"/api/patients/{pid}/progress").json()["games"]] == ["trace"]
+    for pid in ("p1", "p2", "p3", "p4", "p5", "p6"):
+        assert ps[pid]["cameraSparkline"], pid
 
 
 def test_p6_yellow_subjective_only_and_diverging(client):
@@ -124,6 +188,8 @@ def test_p6_yellow_subjective_only_and_diverging(client):
     a = client.get("/api/patients/p6").json()["openAlert"]
     assert (a["rule"], a["severity"], a["source"]) == ("subjective_drop", "yellow", "checkin")
     assert abs(_combined(client, "p6")[-1]["delta"]) < 5
+    assert abs(_combined(client, "p6", "camera")[-1]["delta"]) < 5  # both measurements stable
+    assert a["evidence"]["divergence"] == "Rezultati meritev so stabilni, pacient pa poroča slabše počutje."
 
 
 def test_p7_no_data_only(client):
@@ -169,6 +235,9 @@ def test_triage_counters(client):
     assert counters["noData"] == 1
     assert counters["total"] == 10
     assert [p["id"] for p in body["patients"][:3]] == ["p4", "p6", "p7"]
+    assert counters["stable"] == 7
+    # no other open alert anywhere; p3 in particular has none
+    assert [p["id"] for p in body["patients"] if p["openAlertId"]] == ["p4", "p6", "p7"]
 
 
 def test_history_has_a_closed_alert_with_outcome_and_note(client):
@@ -186,7 +255,7 @@ def test_no_raw_series_in_lists_and_raw_endpoint(client):
     assert "series" not in str(tl)
     from app.seed.traces import LEVEL_PATHS
     for level in (1, 2, 3):
-        s = next(x for x in tl["sessions"] if x["level"] == level)
+        s = next(x for x in tl["sessions"] if x["level"] == level and x["gameType"] == "trace")
         raw = client.get(f"/api/sessions/{s['id']}/raw").json()["series"]
         assert len(raw["targetX"]) == len(LEVEL_PATHS[level]) == len(raw["targetY"])
         n = len(raw["x"])

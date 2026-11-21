@@ -4,13 +4,20 @@ One calm, honest sentence or two about how it went compared with the patient's o
 previous days. Never a number, never an impairment class, never a prompt to call anyone.
 A declining trend is said honestly and calmly; alerts stay the clinician's business.
 
-tone  (today vs the previous days): today's combined delta (trace:all) compared with the
-      mean of the previous up-to TONE_WINDOW session-days: better / lower by TONE_BAND,
-      else similar; "first" while there is no baseline.
-trend (the last days): "declining" when the latest combined delta <= -TREND_BELOW and it
-      is at least TREND_CHANGE lower than TREND_LOOKBACK session-days earlier (or there is
-      an open game alert); "improving" for the mirror case; else "stable"; "unknown"
-      without a baseline.
+Every game (tracing, camera exercises) has its own combined trend (<game>:all); each game
+weighs the same and nothing mixes their scores.
+
+tone  (today vs the previous days): for each game played on the described day, that day's
+      combined delta minus the mean of the game's previous up-to TONE_WINDOW session-days;
+      the mean of these differences decides: better / lower by TONE_BAND, else similar
+      (= today's mean over the games vs the previous days' mean over the same games).
+      "first" while no game has a baseline. A day of tracing only is judged exactly as before
+      camera exercises existed.
+trend (the last days), per game: "declining" when the latest combined delta <= -TREND_BELOW
+      and it is at least TREND_CHANGE lower than TREND_LOOKBACK session-days earlier (or the
+      open alert has a trend trigger of that game); "improving" for the mirror case; else
+      "stable"; "unknown" without a baseline. Overall: "declining" if ANY game is declining,
+      "improving" only if none is declining and at least one is improving.
 """
 from dataclasses import dataclass
 from datetime import date
@@ -20,6 +27,7 @@ from sqlmodel import Session, select
 
 from app.models import TrendSnapshot
 from app.services import alerts
+from app.services.trend import GAMES
 
 TONE_WINDOW = 5  # previous session-days the day is compared with
 TONE_BAND = 3.0  # points of combined trend that count as better / lower
@@ -73,20 +81,35 @@ class FeedbackResult:
     day: Optional[date]  # the session-day described (None before any baseline)
 
 
-def combined_points(db: Session, patient_id: str, upto: Optional[date] = None) -> list[TrendSnapshot]:
-    """trace:all snapshots with a delta (the patient has a baseline), oldest first."""
+def combined_points(db: Session, patient_id: str, upto: Optional[date] = None,
+                    game: str = "trace") -> list[TrendSnapshot]:
+    """<game>:all snapshots with a delta (the patient has a baseline), oldest first."""
     stmt = select(TrendSnapshot).where(
-        TrendSnapshot.patient_id == patient_id, TrendSnapshot.metric == "trace:all",
+        TrendSnapshot.patient_id == patient_id, TrendSnapshot.metric == f"{game}:all",
         TrendSnapshot.delta != None)  # noqa: E711
     if upto is not None:
         stmt = stmt.where(TrendSnapshot.day <= upto)
     return list(db.exec(stmt.order_by(TrendSnapshot.day)).all())
 
 
-def tone_of(today: float, previous: list[float]) -> str:
+def points_by_game(db: Session, patient_id: str, upto: Optional[date] = None) -> dict[str, list[TrendSnapshot]]:
+    """{game: combined snapshots} for the games that have any, tracing first."""
+    out = {g: combined_points(db, patient_id, upto, g) for g in GAMES}
+    return {g: s for g, s in out.items() if s}
+
+
+def tone_diff(today: float, previous: list[float]) -> float:
+    """today minus the mean of the previous days (0 = the baseline itself when there are none)."""
     ref = sum(previous) / len(previous) if previous else 0.0
-    diff = today - ref
+    return today - ref
+
+
+def _tone(diff: float) -> str:
     return "better" if diff >= TONE_BAND else "lower" if diff <= -TONE_BAND else "similar"
+
+
+def tone_of(today: float, previous: list[float]) -> str:
+    return _tone(tone_diff(today, previous))
 
 
 def trend_of(deltas: list[float], game_alert: bool) -> str:
@@ -109,15 +132,37 @@ def message(tone: str, trend: str) -> tuple[str, str]:
     return MESSAGES[(tone, trend)]
 
 
+def overall_trend(trends: list[str]) -> str:
+    known = [t for t in trends if t != "unknown"]
+    if not known:
+        return "unknown"
+    if "declining" in known:
+        return "declining"
+    return "improving" if "improving" in known else "stable"
+
+
+def game_trends(db: Session, patient_id: str, day: date,
+                per_game: Optional[dict[str, list[TrendSnapshot]]] = None) -> dict[str, str]:
+    """{game: PatientTrend} for the games with a baseline as of `day`, tracing first."""
+    per_game = points_by_game(db, patient_id, day) if per_game is None else per_game
+    alert_games = alerts.open_alert_games(db, patient_id)
+    return {g: trend_of([s.delta for s in snaps], g in alert_games) for g, snaps in per_game.items()}
+
+
 def feedback_for(db: Session, patient_id: str, day: date) -> FeedbackResult:
-    """Feedback as of `day`: describes that day if it has a combined trend, otherwise the
-    latest earlier session-day."""
-    snaps = combined_points(db, patient_id, day)
-    if not snaps:
+    """Feedback as of `day`: describes that day if any game has a combined trend on it,
+    otherwise the latest earlier session-day."""
+    per_game = points_by_game(db, patient_id, day)
+    if not per_game:
         title, text = message("first", "unknown")
         return FeedbackResult("first", "unknown", title, text, None)
-    deltas = [s.delta for s in snaps]
-    tone = tone_of(deltas[-1], deltas[-1 - TONE_WINDOW:-1])
-    trend = trend_of(deltas, alerts.has_open_game_alert(db, patient_id))
+    described = max(snaps[-1].day for snaps in per_game.values())
+    diffs = []
+    for snaps in per_game.values():
+        if snaps[-1].day == described:
+            deltas = [s.delta for s in snaps]
+            diffs.append(tone_diff(deltas[-1], deltas[-1 - TONE_WINDOW:-1]))
+    tone = _tone(sum(diffs) / len(diffs))
+    trend = overall_trend(list(game_trends(db, patient_id, day, per_game).values()))
     title, text = message(tone, trend)
-    return FeedbackResult(tone, trend, title, text, snaps[-1].day)
+    return FeedbackResult(tone, trend, title, text, described)

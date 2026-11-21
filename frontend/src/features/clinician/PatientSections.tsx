@@ -72,7 +72,8 @@ export function ActionLog({ alerts, meta }: { alerts: Alert[]; meta: Meta | unde
   )
 }
 
-export function ModelNote({ meta }: { meta: Meta | undefined }) {
+/** cameraVersion: the newest camera session's rules version; null when the patient has no camera sessions. */
+export function ModelNote({ meta, cameraVersion = null }: { meta: Meta | undefined; cameraVersion?: string | null }) {
   return (
     <div className="flex items-center gap-2 text-[0.9375rem] text-muted-foreground" data-testid="model-note">
       <span>Podpora odločanju brez klinične validacije: pacienta primerja z njegovimi prejšnjimi sejami, ne postavlja diagnoz.</span>
@@ -88,12 +89,27 @@ export function ModelNote({ meta }: { meta: Meta | undefined }) {
             <DialogDescription>Kaj ocena pomeni in česa ne.</DialogDescription>
           </DialogHeader>
           <ul className="list-disc space-y-2 pl-5 text-[0.9375rem]">
-            <li>Model oceni posamezen test sledenja (0–100) iz sledi prsta ali miške. Pacienta in njegove zgodovine ne pozna.</li>
-            <li>Trend je pravilo brez modela: primerja glajene ocene z izhodiščem pacienta (mediana sej 2–4; prva seja je vaja).</li>
-            <li>Model je učen na sintetičnih podatkih. Pragovi opozoril so inženirska izbira, ne klinično validirani.</li>
-            <li>Sistem kaže odstopanje od pacientovega lastnega izhodišča, ne postavlja diagnoz. Opozorilo vedno zapre zdravnik.</li>
+            <li>
+              <span className="font-semibold">Sledenje:</span> model oceni posamezen test (0–100) iz sledi prsta ali miške. Učen je na sintetičnih podatkih;
+              pacienta in njegove zgodovine ne pozna.
+            </li>
+            <li>
+              <span className="font-semibold">Vaje s kamero:</span> brez modela. Pravila primerjajo gib z zdravim referenčnim posnetkom (0–100 = delež
+              zdravega giba); hitrost in ritem ne štejeta. Seja s slabim zajemom se ne oceni.
+            </li>
+            <li>Trend je za vsako meritev posebej pravilo brez modela: primerja glajene ocene z izhodiščem pacienta (mediana sej 2–4; prva seja je vaja).</li>
+            <li>Pragovi opozoril so inženirska izbira, ne klinično validirani. Sistem kaže odstopanje od pacientovega lastnega izhodišča, ne postavlja diagnoz. Opozorilo vedno zapre zdravnik.</li>
           </ul>
-          <p className="text-[0.875rem] text-muted-foreground">Različica modela: {meta?.modelVersion ?? 'neznana'}</p>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-[0.875rem] text-muted-foreground">
+            <dt>Različica modela za sledenje:</dt>
+            <dd className="tabular">{meta?.modelVersion ?? 'neznana'}</dd>
+            {cameraVersion && (
+              <>
+                <dt>Različica pravil za kamero:</dt>
+                <dd className="tabular">{cameraVersion}</dd>
+              </>
+            )}
+          </dl>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,6 +1,9 @@
 """Trend rules without a model (plan sections 5 and 8). Parameters are engineering
 choices, not validated thresholds.
 
+Every game has its own trend: metrics "<game>:<level>" and "<game>:all" for game "trace"
+(tracing) and "camera" (camera exercises), computed by the same rules. Histories are always
+per game AND level, so tracing and camera scores never mix.
 """
 from datetime import date
 from statistics import median
@@ -13,6 +16,7 @@ from app.models import GameSession, TrendSnapshot
 from app.services.types import ScoredSession, TrendResult
 
 TREND_VERSION = "rules-0.1"
+GAMES = ("trace", "camera")  # every game with its own trend, tracing first
 EWMA_ALPHA = 0.3
 PRACTICE_SESSIONS = 1  # the first session is practice and is discarded
 BASELINE_SESSIONS = 3  # baseline = median of sessions 2-4
