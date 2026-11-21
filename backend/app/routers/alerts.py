@@ -1,11 +1,10 @@
-"""STUB bodies (Phase 0): agent A completes ack / close."""
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
 from app.deps import Db
-from app.models import Alert
+from app.models import Alert, Clinician
 from app.models.schemas import AlertAckIn, AlertOut
 from app.services import alerts as alert_service
 from app.services import queries
@@ -27,10 +26,10 @@ def list_alerts(db: Db, status: Literal["open", "closed", "all"] = "open"):
 def ack_alert(alert_id: int, data: AlertAckIn, db: Db):
     if db.get(Alert, alert_id) is None:
         raise HTTPException(404, "Opozorilo ne obstaja")
+    if db.get(Clinician, data.clinician_id) is None:
+        raise HTTPException(404, "Zdravnik ne obstaja")
     try:
         alert = alert_service.acknowledge(db, alert_id, data.clinician_id, data.close, data.outcome, data.note)
     except alert_service.AlertError as e:
         raise HTTPException(422, str(e))
-    except NotImplementedError:
-        raise HTTPException(501, "Ni še implementirano")
     return queries.alert_out(db, alert)

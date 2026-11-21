@@ -1,5 +1,5 @@
 """Clinician -> patient message. Kept minimal (add-on in the plan)."""
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.deps import Db, require_patient
 from app.models import Clinician, Message
@@ -13,8 +13,10 @@ router = APIRouter(prefix="/api", tags=["messages"])
 def create_message(data: MessageIn, db: Db):
     require_patient(db, data.patient_id)
     clinician = db.get(Clinician, data.clinician_id)
+    if clinician is None:
+        raise HTTPException(404, "Zdravnik ne obstaja")
     row = Message(patient_id=data.patient_id, direction="to_patient",
-                  author=clinician.name if clinician else None, text=data.text, created_at=clock.now())
+                  author=clinician.name, text=data.text, created_at=clock.now())
     db.add(row)
     db.commit()
     db.refresh(row)
