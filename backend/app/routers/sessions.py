@@ -11,6 +11,8 @@ router = APIRouter(prefix="/api", tags=["sessions"])
 @router.post("/sessions", response_model=SessionResult, operation_id="createSession")
 def create_session(data: SessionIn, db: Db):
     require_patient(db, data.patient_id)
+    if data.game_type == "trace" and data.level not in (1, 2, 3):
+        raise HTTPException(422, "Neznana stopnja igre")
     row, fb, extras = ingest.ingest_session(db, data)
     return SessionResult(session_id=row.id, message_level=fb.level, message_title=fb.title,
                          message_text=fb.text, **extras)
