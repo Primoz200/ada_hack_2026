@@ -1,6 +1,5 @@
-"""Read-side helpers: table rows -> response models. Phase 0 has minimal versions;
-agent B completes status / reason / sparkline / streak logic.
-"""
+"""Read-side helpers: table rows -> response models, patient state for the triage list."""
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -90,10 +89,11 @@ def patient_state(db: Session, p: Patient, today: date) -> PatientState:
         if silent >= alert_rules.GREY_AFTER_MISSED_DAYS:
             status, reason = "no_data", f"Brez vnosa že {silent} dni."
         elif latest is None:
-            scored = db.exec(select(GameSession.id).where(
+            scored = db.exec(select(GameSession.game_type, GameSession.level).where(
                 GameSession.patient_id == p.id, GameSession.completed == True,  # noqa: E712
                 GameSession.counts_for_trend == True)).all()  # noqa: E712
-            n = min(len(scored), BASELINE_NEEDED - 1)
+            per_level = Counter(tuple(r) for r in scored)  # the baseline is per level
+            n = min(max(per_level.values(), default=0), BASELINE_NEEDED - 1)
             status = "insufficient_data"
             reason = f"Premalo sej za izhodišče ({n} od {BASELINE_NEEDED})."
         elif direction == "improving":
@@ -107,23 +107,29 @@ def patient_state(db: Session, p: Patient, today: date) -> PatientState:
                         max(c_days, default=None), n_s, n_c, all_days, delta, direction)
 
 
-def sparkline(db: Session, patient_id: str, today: date, days: int = 14) -> list[tuple[date, float]]:
-    since = today - timedelta(days=days - 1)
-    return [(s.day, s.delta) for s in combined_snapshots(db, patient_id) if since <= s.day <= today]
+SPARK_POINTS = 21  # the last N days that have a value
+
+
+def game_sparkline(db: Session, patient_id: str, today: date, n: int = SPARK_POINTS) -> list[tuple[date, float]]:
+    """Combined trend (trace:all delta) of the last n days that have one."""
+    return [(s.day, s.delta) for s in combined_snapshots(db, patient_id) if s.day <= today][-n:]
+
+
+def checkins_of(db: Session, patient_id: str, upto: Optional[date] = None) -> list[Checkin]:
+    stmt = select(Checkin).where(Checkin.patient_id == patient_id)
+    if upto is not None:
+        stmt = stmt.where(Checkin.day <= upto)
+    return list(db.exec(stmt.order_by(Checkin.day, Checkin.id)).all())
+
+
+def wellbeing_sparkline(db: Session, patient_id: str, today: date,
+                        n: int = SPARK_POINTS) -> list[tuple[date, Optional[float]]]:
+    """The wellbeing rating of the last n days that have a check-in."""
+    return [(c.day, c.answers.get("wellbeing")) for c in checkins_of(db, patient_id, today)][-n:]
 
 
 def days_with_entry(all_days: set, today: date, n: int) -> int:
     return sum(1 for d in all_days if today - timedelta(days=n - 1) <= d <= today)
-
-
-def streak(all_days: set, today: date) -> int:
-    """Consecutive days with any entry, counted back from today (or yesterday if today is empty)."""
-    d = today if today in all_days else today - timedelta(days=1)
-    n = 0
-    while d in all_days:
-        n += 1
-        d -= timedelta(days=1)
-    return n
 
 
 def latest_review(db: Session, patient_id: str) -> Optional[datetime]:
@@ -132,8 +138,13 @@ def latest_review(db: Session, patient_id: str) -> Optional[datetime]:
     return max(rows, default=None)
 
 
-def days_with_checkin(db: Session, patient_id: str, today: date, n: int = 7) -> int:
-    days = db.exec(select(Checkin.day).where(Checkin.patient_id == patient_id,
-                                             Checkin.day > today - timedelta(days=n),
-                                             Checkin.day <= today)).all()
-    return len(set(days))
+def completed_levels(db: Session, patient_id: str, day: date) -> set[tuple[str, int]]:
+    """(game_type, level) pairs with a COMPLETED session on `day`."""
+    rows = db.exec(select(GameSession.game_type, GameSession.level).where(
+        GameSession.patient_id == patient_id, GameSession.day == day,
+        GameSession.completed == True)).all()  # noqa: E712
+    return {(g, lv) for g, lv in rows}
+
+
+def pathway_levels(pathway: Pathway) -> list[tuple[str, int]]:
+    return [(g["gameType"], lv) for g in pathway.games for lv in g["levels"]]

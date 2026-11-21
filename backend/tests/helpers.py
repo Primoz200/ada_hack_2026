@@ -24,7 +24,7 @@ def add_patient(db, pid="p", pathway="stroke", discharge=None):
 
 
 def play(db, pid, day, score, level=1, completed=True, hour=9):
-    """One scored session through ingest_session (preset score). Returns (row, feedback, extras)."""
+    """One session through ingest_session (preset score). Returns the stored row."""
     data = SessionIn(patient_id=pid, game_type="trace", level=level, hand="right",
                      started_at=clock.at(day, hour, level), duration_ms=9000, completed=completed,
                      series={"targetX": [0.1, 0.9], "targetY": [0.5, 0.5], "t": [0, 1], "x": [0.1, 0.9],
@@ -39,9 +39,8 @@ def play_round(db, pid, day, score):
     return [play(db, pid, day, score + off, level=lv) for lv, off in ((1, 5), (2, 0), (3, -5))]
 
 
-def checkin(db, pid, day, signs=(), answers=None, concern="none", text=None):
-    data = CheckinIn(patient_id=pid, warning_signs=list(signs), answers=answers or {}, concern=concern,
-                     concern_text=text)
+def checkin(db, pid, day, wellbeing=7, pain=2):
+    data = CheckinIn(patient_id=pid, wellbeing=wellbeing, pain=pain)
     return ingest.ingest_checkin(db, data, day=day, created_at=clock.at(day, 8))
 
 

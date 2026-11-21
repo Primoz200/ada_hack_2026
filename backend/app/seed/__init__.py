@@ -1,9 +1,10 @@
-"""Deterministic demo data: the ten patient stories of plan section 10.
+"""Deterministic demo data: the ten patient stories of plan section 10 (v8).
 
 The stories (app.seed.stories) are pure functions of (patient, day since discharge). The
 replay below feeds them day by day through app.services.ingest and alerts.sweep, so trend
 and alerts come from the live code path. Everything is relative to clock.today() at reset
-time; the system date is never read directly.
+time; the system date is never read directly. Every story ends YESTERDAY: today is left for
+the presenter's live self-check.
 """
 from datetime import date, timedelta
 
@@ -42,18 +43,16 @@ def _stored_features(feats: dict[str, float]) -> dict[str, float]:
     }
 
 
-def write_day(db: Session, story: st.Story, k: int, day: date,
-              decline: tuple[int, float] | None = None) -> tuple[int, int]:
-    """Write the story's entries for day index k through the real write path.
+def write_day(db: Session, story: st.Story, k: int, day: date) -> tuple[int, int]:
+    """Write the story's self-check of day index k through the real write path.
     Returns (check-ins, sessions) written."""
-    plan = story.plan(k, decline)
+    plan = story.plan(k)
     if plan is None:
         return 0, 0
     hour = _hour(story.id)
-    c = plan.checkin
     ingest.ingest_checkin(
-        db, CheckinIn(patient_id=story.id, warning_signs=c.signs, answers=c.answers, concern=c.concern,
-                      concern_text=c.text),
+        db, CheckinIn(patient_id=story.id, wellbeing=int(plan.ratings["wellbeing"]),
+                      pain=int(plan.ratings["pain"])),
         day=day, created_at=clock.at(day, hour - 1, 30))
     meta = ClientMeta(**_DEVICE_META[story.input_device])
     n_sessions = 0
@@ -77,18 +76,13 @@ def write_day(db: Session, story: st.Story, k: int, day: date,
 
 
 def _clinician_actions(db: Session, story: st.Story, k: int, day: date) -> None:
-    """Closed historical alerts and messages: the clock is fixed to that day meanwhile."""
+    """Historical clinician decisions: the clock is fixed to that day meanwhile."""
     act = story.acks.get(k)
     if act is not None:
         alert = alerts.open_alert(db, story.id)
         if alert is not None:
             close, outcome, note = act
             alerts.acknowledge(db, alert.id, st.CLINICIAN_ID, close, outcome, note)
-    for mk, text in story.messages:
-        if mk == k:
-            db.add(Message(patient_id=story.id, direction="to_patient", author="dr. Ana Novak",
-                           text=text, created_at=clock.at(day, 10, 15)))
-            db.commit()
 
 
 def seed_patients(db: Session) -> None:
@@ -104,19 +98,20 @@ def seed_patients(db: Session) -> None:
     first = min(-s.discharge_ago for s in st.STORIES)  # offset from today, most negative
     saved_fixed = clock._fixed_today
     try:
-        for off in range(first + 1, 1):  # earliest discharge + 1 ... today
+        for off in range(first + 1, 0):  # earliest discharge + 1 ... yesterday
             day = today + timedelta(days=off)
             clock.set_today(day)  # acknowledge() stamps with the (replayed) day
             for s in st.STORIES:
                 k = s.discharge_ago + off
-                if k < 1 or (off == 0 and not s.includes_today):
-                    continue
-                write_day(db, s, k, day)
+                if k >= 1:
+                    write_day(db, s, k, day)
             alerts.sweep(db, day)
             for s in st.STORIES:
                 k = s.discharge_ago + off
-                if k >= 1 and off < 0:
+                if k >= 1:
                     _clinician_actions(db, s, k, day)
+        clock.set_today(today)
+        alerts.sweep(db, today)  # today itself: only the time-driven rules (no entries yet)
     finally:
         clock.set_today(saved_fixed)
 
@@ -132,11 +127,8 @@ def seed(db: Session) -> int:
 def reset_database() -> int:
     """Drop everything, recreate, reseed. Returns the number of patients.
 
-    Clears the simulate offset and decline modes; a fixed "today" (tests, APP_TODAY) stays."""
-    from app.seed import simulate
-
+    Clears any clock offset; a fixed "today" (tests, APP_TODAY) stays."""
     clock.advance(-clock._offset_days)
-    simulate.clear()
     dbmod.drop_tables()
     dbmod.create_tables()
     with Session(dbmod.engine) as db:

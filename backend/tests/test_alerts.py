@@ -1,309 +1,225 @@
+"""v8 alert rules (clinician only) and the human-in-the-loop state machine."""
 import pytest
-from sqlmodel import select
 
-from app.models import Alert, Message
 from app.services import alerts, clock
-from tests.helpers import (add_patient, all_alerts, baseline_days, checkin, d, open_alerts, play)
-
-
-def drop_days(db, pid="p", start=0, n=3, score=40):
-    """Baseline at 70 on days start..start+3, then n bad days. Returns the last day index."""
-    nxt = baseline_days(db, pid, 70, start)
-    for i in range(n):
-        play(db, pid, d(nxt + i), score)
-    return nxt + n - 1
+from tests.helpers import add_patient, all_alerts, baseline_days, checkin, d, open_alerts, play
 
 
 def at(day_idx):
     clock.set_today(d(day_idx))
 
 
-# ------------------------------------------------------------------ game yellow
+def stable(db, start, end, score=70):
+    for i in range(start, end):
+        play(db, "p", d(i), score)
 
-def test_trend_drop_needs_two_of_last_three_session_days(db):
+
+def drifting(db):
+    """Baseline 70, then six days at 62: the combined trend drifts to about -7 (below the
+    baseline band, not yet -10). Returns the next day index."""
+    nxt = baseline_days(db)
+    for i in range(6):
+        play(db, "p", d(nxt + i), 62)
+    return nxt + 6
+
+
+# ------------------------------------------------------------------ rule table
+
+def test_constants():
+    assert (alerts.TREND_DROP_POINTS, alerts.BELOW_BAND_POINTS, alerts.PREVIOUS_DAYS_HIT,
+            alerts.PREVIOUS_DAYS_WINDOW, alerts.BIG_DROP_POINTS) == (10.0, 5.0, 2, 3, 20.0)
+    assert (alerts.WELLBEING_DROP_POINTS, alerts.PAIN_RISE_POINTS, alerts.MIN_CHECKINS_PER_WEEK,
+            alerts.GREY_AFTER_MISSED_DAYS) == (2.0, 2.0, 2, 4)
+
+
+def test_stable_patient_with_one_bad_day_opens_nothing(db):
     add_patient(db)
     nxt = baseline_days(db)
-    play(db, "p", d(nxt), 40)  # EWMA 61 -> delta -9: not yet 10 points
-    play(db, "p", d(nxt + 1), 40)  # delta -15.3: one hit only
-    assert open_alerts(db) == []
-    play(db, "p", d(nxt + 2), 40)  # second hit
+    stable(db, nxt, nxt + 6)
+    play(db, "p", d(nxt + 6), 20)  # delta -15, but the previous days were at baseline
+    stable(db, nxt + 7, nxt + 12)
+    assert all_alerts(db) == []
+
+
+def test_drifting_patient_plus_one_bad_day_opens_yellow_trend_drop(db):
+    add_patient(db)
+    nxt = drifting(db)
+    assert all_alerts(db) == []  # drifting alone (about -7) opens nothing
+    play(db, "p", d(nxt), 45)
     [a] = open_alerts(db)
     assert (a.severity, a.rule, a.source, a.status) == ("yellow", "trend_drop", "game", "new")
-    assert a.reason == "Skupni trend je že 2 od zadnjih 3 dni vsaj 10 točk pod izhodiščem."
-    assert a.evidence["delta"] < -10 and a.evidence["sessionIds"]
+    assert a.reason == "Rezultati sledenja so že več dni pod pacientovim izhodiščem."
+    assert a.evidence["delta"] <= -10 and a.evidence["sessionIds"]
+    assert len(a.evidence["previousDeltas"]) == 3 and all(x <= -5 for x in a.evidence["previousDeltas"])
     assert a.evidence["triggers"][0]["rule"] == "trend_drop"
+    assert not any(ch.isdigit() for ch in a.reason)
 
 
-def test_one_bad_day_stays_silent_and_offers_retry(db):
+def test_big_drop_is_red_on_its_own(db):
     add_patient(db)
     nxt = baseline_days(db)
-    _, fb, extras = play(db, "p", d(nxt), 30)
-    assert open_alerts(db) == []
-    assert extras["offer_retry"] is True and extras["compared_to_usual"] == "lower"
-    assert fb.level == "thanks" and "še enkrat" in fb.text
-    play(db, "p", d(nxt + 1), 70)
-    play(db, "p", d(nxt + 2), 70)
-    assert all_alerts(db) == []
+    stable(db, nxt, nxt + 3)
+    play(db, "p", d(nxt + 3), 0)  # EWMA 70 -> 49: delta -21
+    [a] = open_alerts(db)
+    assert (a.severity, a.rule) == ("red", "big_drop")
+    assert a.evidence["delta"] <= -20
 
 
-def test_noisy_but_stable_series_opens_no_alert(db):
+def test_both_is_red_and_escalates_the_open_alert(db):
     add_patient(db)
     for i in range(4):
-        play(db, "p", d(i), 70)
-    for i in range(21):
-        play(db, "p", d(4 + i), 70 + (8 if i % 2 else -8))
-    assert all_alerts(db) == []
-
-
-def test_slow_decline_opens_exactly_one_yellow(db):
-    add_patient(db)
-    nxt = baseline_days(db)
-    for i in range(21):  # three good weeks
-        play(db, "p", d(nxt + i), 70 + (1 if i % 2 else -1))
-    nxt += 21
-    first_day = None
-    for i in range(25):
-        play(db, "p", d(nxt + i), 70 - 1.5 * (i + 1))
-        if first_day is None and all_alerts(db):
-            first_day = i
-    [a] = all_alerts(db)
-    assert a.severity == "yellow" and a.rule == "trend_drop"
-    assert 5 <= first_day <= 14  # opens on the way down, not on day one
-    assert len(a.evidence["triggers"]) > 1  # later days were appended, not new alerts
-
-
-# ------------------------------------------------------------------ red
-
-@pytest.mark.parametrize("pathway,sign,level,title", [
-    ("stroke", "face", "call_112", "Takoj pokličite 112"),
-    ("stroke", "speech", "call_112", "Takoj pokličite 112"),
-    ("ctr", "wound_red", "call_clinic", "Še danes pokličite ambulanto"),
-    ("ctr", "fever", "call_clinic", "Še danes pokličite ambulanto"),
-])
-def test_warning_sign_is_red_with_matching_feedback(db, pathway, sign, level, title):
-    add_patient(db, pathway=pathway)
-    _, fb = checkin(db, "p", d(0), signs=[sign])
+        checkin(db, "p", d(i), wellbeing=7, pain=2)
+    for i in range(4, 11):
+        checkin(db, "p", d(i), wellbeing=4, pain=2)
+    nxt = drifting(db)
     [a] = open_alerts(db)
-    assert (a.severity, a.rule, a.source) == ("red", "warning_sign", "checkin")
-    assert a.evidence["warningSigns"] == [sign]
-    assert (fb.level, fb.title) == (level, title)
-    assert "obveščen" not in fb.text or level == "call_clinic"
-    if level == "call_112":
-        assert "112" in fb.text and "Ne čakajte" in fb.text  # never only "the team was informed"
-
-
-def test_warning_sign_overrides_a_quiet_trend(db):
-    add_patient(db)
-    for i in range(6):
-        play(db, "p", d(i), 70)
-    checkin(db, "p", d(6), signs=["limb"])
-    assert open_alerts(db)[0].severity == "red"
-
-
-def test_red_from_game_yellow_plus_checkin_yellow(db):
-    add_patient(db)
-    last = drop_days(db)
-    assert open_alerts(db)[0].severity == "yellow"
-    _, fb = checkin(db, "p", d(last), concern="call", text="Počutim se čudno")
+    assert (a.severity, a.rule) == ("yellow", "subjective_drop")  # the ratings came first
+    play(db, "p", d(nxt), 45)
     [a] = open_alerts(db)
-    assert (a.severity, a.rule) == ("red", "double_yellow")
-    rules = [t["rule"] for t in a.evidence["triggers"]]
-    assert {"trend_drop", "concern_call", "double_yellow"} <= set(rules)
-    assert a.evidence["concernText"] == "Počutim se čudno"
-
-
-def test_red_from_game_yellow_plus_pain_rise(db):
-    add_patient(db, pathway="ctr")
-    for i in range(15):  # pain 1, then 4 from day 10; game: baseline d8-d11, drop d12-d14
-        if 8 <= i <= 11:
-            play(db, "p", d(i), 70)
-        elif i > 11:
-            play(db, "p", d(i), 40)
-        checkin(db, "p", d(i), answers={"pain": 1 if i < 10 else 4})
-    [a] = open_alerts(db)
-    assert a.severity == "red" and a.rule == "double_yellow"
-    assert {"symptom_rise", "trend_drop"} <= {t["rule"] for t in a.evidence["triggers"]}
-
-
-# ------------------------------------------------------------------ check-in yellow
-
-def test_concern_call_opens_yellow(db):
-    add_patient(db)
-    _, fb = checkin(db, "p", d(0), concern="call", text="Prosim za klic")
-    [a] = open_alerts(db)
-    assert (a.severity, a.rule, a.source) == ("yellow", "concern_call", "checkin")
-    assert a.evidence["concernText"] == "Prosim za klic"
-    assert fb.level == "neutral"
-    checkin(db, "p", d(1), concern="little")  # "little" alone does not alert
+    assert (a.severity, a.rule, a.source) == ("red", "both", "game")
+    assert a.reason == "Padajo rezultati sledenja in počutje hkrati."
+    rules = {t["rule"] for t in a.evidence["triggers"]}
+    assert {"subjective_drop", "trend_drop", "both"} <= rules
+    assert a.evidence["wellbeingChange"] <= -2 and a.evidence["delta"] <= -10
     assert len(all_alerts(db)) == 1
 
 
-@pytest.mark.parametrize("qid,before,after,fires", [
-    ("pain", 2, 4, True), ("pain", 2, 3, False), ("tingling", 1, 2, True), ("tingling", 1, 1.5, False),
-])
-def test_symptom_rise_thresholds(db, qid, before, after, fires):
-    add_patient(db, pathway="ctr")
-    for i in range(14):
-        checkin(db, "p", d(i), answers={qid: before if i < 7 else after})
-    assert bool(open_alerts(db)) is fires
-    if fires:
-        assert open_alerts(db)[0].rule == "symptom_rise"
-
-
-def test_muted_ctr_pain_pattern_early_after_discharge(db):
-    # pain 1 -> 4 (<= maxValue 5) in the first 21 days after discharge: expected, no alert
-    add_patient(db, pathway="ctr", discharge=d(0))
-    for i in range(14):
-        checkin(db, "p", d(i), answers={"pain": 1 if i < 7 else 4})
-    assert all_alerts(db) == []
-    # the same pattern later in recovery does alert
-    add_patient(db, pid="q", pathway="ctr", discharge=d(-60))
-    for i in range(14):
-        checkin(db, "q", d(i), answers={"pain": 1 if i < 7 else 4})
-    assert len(open_alerts(db, "q")) == 1
-    # early but above the ceiling still alerts
-    add_patient(db, pid="r", pathway="ctr", discharge=d(0))
-    for i in range(14):
-        checkin(db, "r", d(i), answers={"pain": 2 if i < 7 else 7})
-    assert len(open_alerts(db, "r")) == 1
-
-
-def test_divergence_flag_when_game_drops_but_patient_feels_fine(db):
+def test_subjective_drop_alone_is_yellow_and_diverging(db):
     add_patient(db)
-    for i in range(10):
-        checkin(db, "p", d(i), answers={"arm_function": 4})
-    nxt = baseline_days(db, start=10)
-    for i in range(3):
-        play(db, "p", d(nxt + i), 40)
-        checkin(db, "p", d(nxt + i), answers={"arm_function": 4})
+    nxt = baseline_days(db)
+    stable(db, nxt, 14)
+    for i in range(14):
+        if i < 7:
+            checkin(db, "p", d(i), wellbeing=7, pain=2)
+        else:
+            checkin(db, "p", d(i), wellbeing=4, pain=4)
     [a] = open_alerts(db)
-    assert a.rule == "trend_drop" and a.diverging is True
-    assert "Rezultati igre padajo" in a.evidence["divergence"]
+    assert (a.severity, a.rule, a.source) == ("yellow", "subjective_drop", "checkin")
+    # the sentence of the first trigger (wellbeing crossed first); later triggers are appended
+    assert a.reason == "Pacient poroča slabše počutje kot prejšnji teden."
+    assert a.evidence["triggers"][-1]["reason"] == (
+        "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden.")
+    assert a.diverging is True and a.evidence["divergence"]
+    assert a.evidence["checkinIds"]
 
 
-# ------------------------------------------------------------------ grey
+def test_pain_rise_alone(db):
+    add_patient(db)
+    for i in range(14):
+        checkin(db, "p", d(i), wellbeing=7, pain=2 if i < 7 else 5)
+    [a] = open_alerts(db)
+    assert a.rule == "subjective_drop"
+    assert a.reason == "Pacient poroča močnejšo bolečino kot prejšnji teden."
+    assert a.evidence["painChange"] >= 2
+
+
+@pytest.mark.parametrize("before,after,fires", [(7, 5, True), (7, 6, False), (5, 8, False)])
+def test_wellbeing_threshold(db, before, after, fires):
+    add_patient(db)
+    for i in range(14):
+        checkin(db, "p", d(i), wellbeing=before if i < 7 else after, pain=2)
+    assert bool(open_alerts(db)) is fires
+
+
+def test_each_week_needs_two_checkins(db):
+    add_patient(db)
+    checkin(db, "p", d(0), wellbeing=9, pain=1)
+    for i in (7, 8, 9):
+        checkin(db, "p", d(i), wellbeing=2, pain=9)
+    assert all_alerts(db) == []
+
+
+# ------------------------------------------------------------------ state machine
+
+def test_one_open_alert_with_appended_triggers(db):
+    add_patient(db)
+    nxt = drifting(db)
+    play(db, "p", d(nxt), 45)
+    play(db, "p", d(nxt + 1), 55)
+    play(db, "p", d(nxt + 2), 55)
+    [a] = open_alerts(db)
+    assert len(all_alerts(db)) == 1
+    assert [t["rule"] for t in a.evidence["triggers"]].count("trend_drop") >= 2
+
+
+def test_no_refire_after_close_same_episode_but_worse_opens_new(db):
+    add_patient(db)
+    nxt = drifting(db)
+    play(db, "p", d(nxt), 45)
+    [a] = open_alerts(db)
+    at(nxt)
+    alerts.acknowledge(db, a.id, "c1", True, "adjusted_exercises", "Vaje prilagojene.")
+    for i in range(1, 7):  # trend stays below -10 for days: same episode, no re-fire
+        at(nxt + i)
+        play(db, "p", d(nxt + i), 57)
+    assert open_alerts(db) == [] and len(all_alerts(db)) == 1
+    at(nxt + 7)
+    play(db, "p", d(nxt + 7), 0)  # much worse: red big_drop is a new alert
+    [b] = open_alerts(db)
+    assert (b.severity, b.rule) == ("red", "big_drop") and b.id != a.id
+
 
 def test_grey_after_four_missed_days_and_auto_close(db):
-    add_patient(db, discharge=d(-30))
+    add_patient(db)
     checkin(db, "p", d(0))
     alerts.sweep(db, d(3))
     assert all_alerts(db) == []
     alerts.sweep(db, d(4))
-    [a] = open_alerts(db)
-    assert (a.severity, a.rule, a.source) == ("grey", "no_data", "missing")
+    [g] = open_alerts(db)
+    assert (g.severity, g.rule, g.source) == ("grey", "no_data", "missing")
+    assert g.evidence["missedDays"] == 4 and not any(ch.isdigit() for ch in g.reason)
     alerts.sweep(db, d(5))
-    assert len(all_alerts(db)) == 1  # a sweep never duplicates
-    play(db, "p", d(6), 70)  # new data closes it by itself
-    [a] = all_alerts(db)
-    assert (a.status, a.closed_by, a.outcome) == ("closed", "system", None)
-    assert open_alerts(db) == []
+    assert len(all_alerts(db)) == 1  # grey never piles on
+    checkin(db, "p", d(6))
+    [g] = all_alerts(db)
+    assert (g.status, g.closed_by, g.outcome) == ("closed", "system", None)
 
 
-def test_grey_counts_from_discharge_and_not_for_new_discharges(db):
-    add_patient(db, pid="old", discharge=d(-10))
-    add_patient(db, pid="new", discharge=d(-3))
-    alerts.sweep(db, d(0))
-    assert len(open_alerts(db, "old")) == 1 and open_alerts(db, "new") == []
-    alerts.sweep(db, d(1))
-    assert len(open_alerts(db, "new")) == 1  # discharged 4 days ago now
-
-
-def test_grey_is_escalated_by_yellow_not_duplicated(db):
-    add_patient(db, discharge=d(-30))
-    alerts.sweep(db, d(0))
-    [grey] = open_alerts(db)
-    checkin(db, "p", d(1), concern="call")
-    [a] = all_alerts(db)
-    assert a.id == grey.id and (a.severity, a.rule, a.status) == ("yellow", "concern_call", "new")
-    assert [t["rule"] for t in a.evidence["triggers"]] == ["no_data", "concern_call"]
-
-
-# ------------------------------------------------------------------ anti-noise + state machine
-
-def test_one_open_alert_with_appended_triggers_and_escalation(db):
+def test_grey_is_escalated_by_a_yellow_not_duplicated(db):
     add_patient(db)
-    last = drop_days(db)
-    checkin(db, "p", d(last), concern="call")
-    play(db, "p", d(last + 1), 40)
-    checkin(db, "p", d(last + 1), signs=["face"])
-    [a] = all_alerts(db)
-    assert a.severity == "red" and a.rule == "warning_sign"
-    assert len(a.evidence["triggers"]) >= 4
-    for t in a.evidence["triggers"]:
-        assert set(t) >= {"rule", "severity", "day", "reason"}
+    nxt = drifting(db)  # last entry on day nxt - 1
+    alerts.sweep(db, d(nxt + 3))
+    [g] = open_alerts(db)
+    assert g.severity == "grey"
+    play(db, "p", d(nxt + 3), 45)  # the first new entry is itself a yellow
+    [a] = open_alerts(db)
+    assert a.id == g.id and (a.severity, a.rule) == ("yellow", "trend_drop")
 
 
-def test_no_refire_after_ack_or_close_for_same_episode(db):
+def test_acknowledge_then_escalation_returns_to_new(db):
     add_patient(db)
-    last = drop_days(db)
-    at(last)
+    nxt = drifting(db)
+    play(db, "p", d(nxt), 45)
     [a] = open_alerts(db)
-    a = alerts.acknowledge(db, a.id, "c1", False, None, None)
-    assert a.status == "acknowledged" and a.acknowledged_by == "dr. Ana Novak" and a.acknowledged_at
-    play(db, "p", d(last + 1), 40)  # still the same episode: appended, no new alert
-    assert len(all_alerts(db)) == 1
-    at(last + 1)
-    alerts.acknowledge(db, a.id, "c1", True, "called_reassured", "Klic opravljen")
-    for i in range(2, 6):
-        play(db, "p", d(last + i), 40)
-    assert len(all_alerts(db)) == 1 and open_alerts(db) == []
-    # a worse severity is a new step and does open a new alert
-    checkin(db, "p", d(last + 6), signs=["face"])
-    [new] = open_alerts(db)
-    assert new.id != a.id and new.severity == "red"
-
-
-def test_acknowledged_alert_escalated_returns_to_new(db):
-    add_patient(db)
-    last = drop_days(db)
-    at(last)
-    [a] = open_alerts(db)
-    alerts.acknowledge(db, a.id, "c1", False, None, None)
-    checkin(db, "p", d(last + 1), signs=["face"])
-    [a] = open_alerts(db)
-    assert a.severity == "red" and a.status == "new" and a.acknowledged_at is None
-
-
-def test_acknowledge_fields_and_system_message_once(db):
-    add_patient(db)
-    checkin(db, "p", d(0), signs=["face"])
-    at(0)
-    [a] = open_alerts(db)
-    a = alerts.acknowledge(db, a.id, "c1", True, "urgent_referral", "Napoteno")
-    assert a.status == "closed" and a.closed_by == "dr. Ana Novak" and a.outcome == "urgent_referral"
-    assert a.note == "Napoteno" and a.acknowledged_by == "dr. Ana Novak"  # close fills ack fields too
-    msgs = db.exec(select(Message).where(Message.patient_id == "p")).all()
-    assert [(m.direction, m.text) for m in msgs] == [("system", "Zdravnik je pregledal vaše rezultate.")]
+    a = alerts.acknowledge(db, a.id, "c1", False, None, "Pogledam jutri.")
+    assert (a.status, a.acknowledged_by, a.note) == ("acknowledged", "dr. Ana Novak", "Pogledam jutri.")
+    assert a.acknowledged_at is not None and a.closed_at is None
+    play(db, "p", d(nxt + 1), 0)
+    [b] = open_alerts(db)
+    assert b.id == a.id and b.severity == "red" and b.status == "new"
 
 
 def test_close_requires_outcome_and_closed_alert_stays_closed(db):
     add_patient(db)
-    checkin(db, "p", d(0), signs=["face"])
+    nxt = drifting(db)
+    play(db, "p", d(nxt), 45)
     [a] = open_alerts(db)
-    with pytest.raises(alerts.AlertError, match="izid"):
-        alerts.acknowledge(db, a.id, "c1", True, None, None)
-    assert db.get(Alert, a.id).status == "new"
-    alerts.acknowledge(db, a.id, "c1", True, "false_alarm", None)
     with pytest.raises(alerts.AlertError):
-        alerts.acknowledge(db, a.id, "c1", False, None, None)
+        alerts.acknowledge(db, a.id, "c1", True, None, None)
+    with pytest.raises(alerts.AlertError):
+        alerts.acknowledge(db, a.id, "c1", True, "made_up", None)
+    a = alerts.acknowledge(db, a.id, "c1", True, "false_alarm", None)
+    assert (a.status, a.outcome, a.closed_by) == ("closed", "false_alarm", "dr. Ana Novak")
+    with pytest.raises(alerts.AlertError):
+        alerts.acknowledge(db, a.id, "c1", True, "false_alarm", None)
 
-
-# ------------------------------------------------------------------ API
 
 def test_api_close_without_outcome_is_422(client):
-    patients = client.get("/api/patients").json()["patients"]
-    pid = next(p["id"] for p in patients if p["pathwayCode"] == "stroke")
-    res = client.post("/api/checkins", json={"patientId": pid, "warningSigns": ["face"]})
-    assert res.status_code == 200 and res.json()["messageLevel"] == "call_112"
-    alert = next(a for a in client.get("/api/alerts?status=open").json() if a["patientId"] == pid)
-    assert alert["severity"] == "red"
-    url = f"/api/alerts/{alert['id']}/ack"
-    bad = client.post(url, json={"clinicianId": "c1", "close": True})
-    assert bad.status_code == 422 and "izid" in bad.json()["detail"]
-    assert client.post(url, json={"clinicianId": "nope"}).status_code == 404
+    alert = client.get("/api/alerts").json()[0]
+    r = client.post(f"/api/alerts/{alert['id']}/ack", json={"clinicianId": "c1", "close": True})
+    assert r.status_code == 422
     assert client.post("/api/alerts/999999/ack", json={"clinicianId": "c1"}).status_code == 404
-    ack = client.post(url, json={"clinicianId": "c1"})
-    assert ack.status_code == 200 and ack.json()["status"] == "acknowledged"
-    done = client.post(url, json={"clinicianId": "c1", "close": True, "outcome": "called_reassured"})
-    assert done.status_code == 200 and done.json()["status"] == "closed"
-    assert client.post("/api/checkins", json={"patientId": "zzz"}).status_code == 404
+    r = client.post(f"/api/alerts/{alert['id']}/ack",
+                    json={"clinicianId": "c1", "close": True, "outcome": "called_reassured", "note": "Ok."})
+    assert r.status_code == 200 and r.json()["status"] == "closed" and r.json()["outcome"] == "called_reassured"
+    assert all(a["id"] != alert["id"] for a in client.get("/api/alerts").json())
