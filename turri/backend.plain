@@ -1,0 +1,202 @@
+---
+description: Backend of the post-discharge patient monitoring platform (research prototype on synthetic data) - FastAPI + SQLite.
+import:
+  - stdlib/lang/python
+---
+
+> Regenerated with turri for the AdaHack 2026 Codeplain challenge. It replaces backend/app of the
+> hand-written platform; backend/models/ (the ML models: tracer, camera) is NOT part of this module,
+> it is only called. The API contract the React frontend is built against is resources/openapi.json.
+
+***definitions***
+
+- :Api: is the HTTP JSON API of the backend, every path under `/api`, exactly as [the API contract](resources/openapi.json) describes it: paths, methods, operation ids, query parameters and the camelCase field names and types of every request and response body.
+
+- :Today: is the date the backend treats as the current day.
+  - It is the date in the environment variable `APP_TODAY` (ISO `YYYY-MM-DD`) when it is set, otherwise the real current date.
+
+- :Pathway: is a recovery pathway, configured as data: a code, a name, a frequency text, the games its self-check has (each with a game type, a title and its levels) and the daily rating questions.
+  - There are exactly two: `stroke` "Možganska kap" and `ctr` "Operacija karpalnega kanala", both with frequency "vsak dan" and the one game `{"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3]}`.
+  - Both ask the same two questions, each with kind "scale", min 1 and max 10: `wellbeing` (text "Kako se počutite danes?", short label "Počutje", min label "Zelo slabo", max label "Odlično", higherIsWorse false) and `pain` (text "Kako močna je bolečina?", short label "Bolečina", min label "Brez bolečine", max label "Zelo močna", higherIsWorse true).
+
+- :Clinician: is a clinician who handles alerts. There is exactly one: id `c1`, name "dr. Ana Novak", role "zdravnica".
+
+- :Patient: is a monitored patient: id, fictional name, birth year, :Pathway: code, affected side (`left` or `right`), discharge date, optional next visit date, whether it is the demo patient, and a sort order.
+
+- :Checkin: is a patient's two daily ratings, `wellbeing` (1-10, higher is better) and `pain` (1-10, higher is worse), for one day, with the time it was made.
+
+- :GameSession: is one played level of a game: patient, game type (`trace`, `camera_tapping`, `camera_reach`, `motion`), level, hand, start time, day, duration in ms, whether it was completed, an optional abort reason, the input device (`touch`, `mouse`, `camera`), the score (0-100, none when not scored), the impairment class, the model version, the features (name to number), whether it counts for the trend, and its raw data: the series (name to list of numbers) and the client meta.
+
+- :ImpairmentClass: of a score is `normal` from 85, `mild` from 65, `moderate` from 40, and `severe` below 40.
+
+- :LevelTrend: is the trend of one patient, one game type and one level as of a day, computed from that level's scored :GameSession: rows that count for the trend, up to and including that day, in order of day, start time and id.
+  - The first such session is practice and is left out.
+  - The baseline is the median of the next three sessions; there is none until those three exist.
+  - The EWMA runs over all sessions after the practice one, with alpha 0.3, seeded with the first of them.
+  - The delta is the EWMA minus the baseline; the delta percent is the delta divided by the baseline times 100.
+  - The direction is `improving` when the delta is above 5, `declining` below -5, `stable` otherwise, and `insufficient_data` without a baseline.
+  - The slope is the least-squares slope, in points per session, of the last 7 scores after the practice one; none with fewer than 3.
+
+- :CombinedTrend: is the trend of one patient and one game type on a day: the mean of the latest delta of every level of that game that has a baseline as of that day, none when no level has one. Its direction follows the same 5-point band as a :LevelTrend:.
+
+- :TrendSnapshot: is a stored row per patient, metric and day: metric `<gameType>:<level>` for a :LevelTrend: and `<gameType>:all` for the :CombinedTrend:, with the number of sessions, baseline, EWMA, slope, delta, delta percent and direction.
+
+- :Alert: is a clinician-facing alert about one patient: source (`game`, `checkin`, `missing`), rule, severity (`red`, `yellow`, `grey`), status (`new`, `acknowledged`, `closed`), a one-sentence Slovenian reason, evidence (a JSON object with a `triggers` list), whether the signals diverge, created and updated times, the day it opened, who acknowledged it and when, who closed it and when, the outcome and a note.
+
+- :Trigger: is one firing of an alert rule as of a day: rule, severity, source, the day of the data it concerns, the reason sentence, and extra numbers and ids for the evidence.
+
+- :Outcome: is how a clinician closed an :Alert:, one of `called_reassured` "Poklical, pomiril", `adjusted_exercises` "Prilagodil vaje", `visit_moved_earlier` "Pregled prestavljen naprej", `urgent_referral` "Nujna napotitev", `unreachable` "Nedosegljiv", `false_alarm` "Lažni alarm ali težava s podatki".
+
+- :Scorer: is what turns a completed :GameSession: into a score, an :ImpairmentClass:, features and a model version.
+
+- :StandinVersion: is the model version string `standin-0.1`.
+
+- :DemoStory: is one of the ten synthetic patient histories the demo is seeded with, given as data and pure functions in [the demo stories](resources/seed_stories.py).
+
+***implementation reqs***
+
+- :Implementation: uses FastAPI with Pydantic v2, SQLModel on SQLite, and Uvicorn.
+  - Runtime dependencies also include numpy, scipy, scikit-learn and joblib, which the external tracer model needs.
+- :Implementation: keeps its code in the package `app/`, with `app/main.py` exposing the FastAPI application as `app`.
+  - It builds with `uv sync`.
+  - It starts with `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+- :Implementation: is laid out as `app/models/` (tables and the Pydantic request and response models), `app/routers/` (one `APIRouter` per resource), `app/services/` (business logic, no HTTP), `app/seed/` (demo data) and `app/db.py` (engine and session).
+- :Implementation: declares every request and response body as a Pydantic model with camelCase aliases (`alias_generator=to_camel`, `populate_by_name=True`, `from_attributes=True`), so the JSON matches the :Api: field for field.
+  - Datetimes are stored timezone-aware in UTC and serialised as ISO 8601 ending in `Z`; a naive datetime read back from SQLite is treated as UTC.
+  - Dates are serialised as `YYYY-MM-DD`.
+- :Implementation: answers an error the way FastAPI's `HTTPException` does: the status code and the body `{"detail": "<Slovenian sentence>"}`; request validation failures keep FastAPI's default 422 body.
+- :Implementation: reads its settings from environment variables.
+  - `APP_DB_URL` is the SQLAlchemy URL of the database, default a SQLite file `data/app.db` in the folder above the package (the folder is created when missing); `sqlite://` is an in-memory database kept on one connection (`StaticPool`, `check_same_thread=False`).
+  - `APP_TODAY` sets :Today:.
+  - `APP_KEEP_DB` set to `1` makes startup keep an existing database and seed only an empty one; otherwise every startup resets and reseeds the demo.
+  - `APP_MODELS_DIR` is the folder of the external ML models, default `models` in the folder above the package (in the platform repository that is `backend/models/`).
+  - `APP_FRONTEND_DIST` is the built frontend, default `frontend/dist` two folders above the package; when it exists, `/assets` is served from it and every other non-API GET path returns the file at that path or `index.html`.
+- :Implementation: gets :Today: and the current time only through one clock module, `app/services/clock.py`, never from `date.today()` or `datetime.now()` elsewhere.
+  - The clock can be fixed to a date and shifted by days, which the seed replay and the unit tests use; a reset of the demo clears the shift.
+  - "Now" is the real UTC time of day on :Today:.
+- :Implementation: writes every :Checkin: and :GameSession: through one ingest service, used by both the :Api: and the seed, so that stored data, trends and alerts always agree.
+  - The ingest service takes optional overrides of the day, the creation time and a preset score, which only the seed uses.
+- :Implementation: keeps the raw series and client meta of a :GameSession: in a table of their own, keyed by the session id, so listing sessions never loads them.
+- :Implementation: stores JSON values (pathway games and questions, check-in answers, session features, series, client meta, alert evidence) in SQLite JSON columns.
+- :Implementation: keeps every threshold of the trend, alert, divergence and feedback rules as a named module-level constant.
+- :Implementation: loads the external tracer model lazily, at most once per process, as [the tracer bridge](resources/tracer_bridge.py) does, from `<APP_MODELS_DIR>/tracer` (its modules `common`, `features`, `levels` and its artifact `artifacts/tracer_gbm.joblib`), with that folder put on `sys.path`.
+  - Any failure to import or call it is logged and makes the :Scorer: use the stand-in.
+- :Implementation: keeps a copy of [the tracer levels](resources/tracer_levels.json) as `app/seed/tracer_levels.json` and reads the level paths from it.
+- :UnitTests: use FastAPI's `TestClient` and an in-memory SQLite engine per test, with `APP_KEEP_DB=1` and :Today: fixed to 2026-11-21.
+- :UnitTests: never need `APP_MODELS_DIR` to exist: without the external model the :Scorer: falls back to the stand-in.
+
+***test reqs***
+
+- :ConformanceTests: use pytest and httpx, and run with `pytest`.
+- :ConformanceTests: find the built code's folder in the environment variable `BACKEND_BUILD_DIR`.
+- :ConformanceTests: start the service from that folder as a separate process with `uv run uvicorn app.main:app --host 127.0.0.1 --port <free port>`, and wait until `GET /api/meta` answers, for at most 60 seconds.
+  - The process gets `APP_TODAY=2026-11-21`, `APP_DB_URL` pointing to a SQLite file in a temporary folder and `APP_MODELS_DIR` pointing to an empty temporary folder.
+  - One service is started for the whole test session; a test that changes data first calls `POST /api/admin/reset`.
+- :ConformanceTests: reach the service over HTTP only, never import its code, and stop it when they finish, passing or failing.
+- :ConformanceTests: check a failure by its status code, never by its message.
+- :ConformanceTests: pass ruff and mypy as the conformance testing script runs them, and are typed throughout.
+
+***functional specs***
+
+# meta-and-pathways
+`GET /api/pathways` returns the two :Pathway: rows with their games and questions.
+
+`GET /api/meta` returns :Today:, `syntheticData` true, the list of :Clinician: rows, `outcomes` (each :Outcome: id to its Slovenian label), the version of the :Scorer: active now (the external model's version once it has loaded and its last call succeeded, otherwise :StandinVersion:) and `defaultPatientId` `p3`.
+
+# demo-patients
+The demo has the two :Pathway: rows, the :Clinician: and the ten :DemoStory: patients (id, name, birth year, pathway, side, sort order, demo flag), each discharged the story's number of days before :Today:, with its next visit the story's number of days after :Today: (none when the story has none).
+- `POST /api/admin/reset` drops and recreates every table, clears the clock shift, seeds the demo, and returns `ok` true and the number of patients (10).
+- On startup the demo is reset, unless `APP_KEEP_DB=1`, in which case only an empty database is seeded.
+
+# checkins
+`POST /api/checkins` with `patientId`, `wellbeing` and `pain` stores a :Checkin: for :Today: and returns its `checkinId`.
+- An unknown patient is 404 "Pacient ne obstaja".
+- A rating outside 1-10 is 422.
+- A second check-in of the same patient on the same day replaces the answers and time of the first one, keeping its id.
+
+# trace-scoring
+The :Scorer: scores a `trace` session with the external tracer model when it is available and the level is 1, 2 or 3; otherwise, or when the model fails, with the stand-in.
+- The external model is called with level id `line`, `circle` or `maze` for levels 1, 2, 3 and with the coordinate series `targetX`, `targetY`, `x`, `y` multiplied by 1000; its score is clamped to 0-100 and rounded to one decimal, a non-finite score counts as a failure, and an impairment class it returns outside the four is replaced by the :ImpairmentClass: of the score.
+- The stand-in takes every k-th point of the trace (k = max(1, points // 300)), the distance of each to the nearest segment of the target polyline, and their mean `mean_dev`; accuracy = max(0, 1 - mean_dev / 0.06), speed = clamp(1 - (duration_s - 8) / 40, 0, 1), score = round(100 * (0.8 * accuracy + 0.2 * speed), 1); features `mean_dev` (4 decimals) and `duration_s` (2 decimals); version :StandinVersion:.
+- A trace with fewer than 2 target points or no trace points scores 0, `severe`, no features.
+- Any other game type scores 50, `moderate`, no features, :StandinVersion:.
+
+# sessions
+`POST /api/sessions` takes a game result (`patientId`, `gameType`, `level`, `hand`, `startedAt`, `durationMs` >= 0, `completed`, `abortReason`, `series`, `clientMeta` with `inputDevice`, `canvasW`, `canvasH`, `devicePixelRatio`, `userAgent`), stores a :GameSession: for :Today: and returns `sessionId` and `scored`.
+- An unknown patient is 404 "Pacient ne obstaja"; a `trace` level other than 1, 2, 3 is 422 "Neznana stopnja igre".
+- A completed session is scored by the :Scorer: and counts for the trend; an aborted one is stored without score, class, model version or features, does not count for the trend, and `scored` is false.
+- Repeated sessions of the same level on the same day are all stored and all count.
+
+`GET /api/sessions/{sessionId}/raw` returns the session's id, patient, game type, level, day, score, series and client meta; an unknown id is 404 "Seja ne obstaja".
+
+# trend-snapshots
+After a scored :GameSession: is stored, the :TrendSnapshot: rows of that patient, game type and day are recomputed and upserted.
+- There is one `<gameType>:<level>` row for every level played that day, holding that level's :LevelTrend: and its number of sessions.
+- There is one `<gameType>:all` row holding the :CombinedTrend: (baseline, EWMA, slope and delta percent empty), whose number of sessions is the number of distinct days with a scored session so far. A level not played that day contributes its latest delta, so a self-check still in progress never shows one level as the whole trend.
+
+# divergence
+The divergence of a patient as of a day compares the latest `trace:all` delta up to that day with the change of the patient's wellbeing index.
+- The wellbeing index of a :Checkin: is the mean of its answered ratings normalised to 0-1 by each question's range, inverted for a question where higher is worse.
+- The change is the mean index of the last 7 days (day - 6 to day) minus the mean of the 7 days before; there is none when either week has no check-in.
+- It diverges when the delta is at most -10 and the change is at least -0.05, with the sentence "Rezultati sledenja padajo, pacient pa poroča enako ali boljše počutje."; or when |delta| is below 5 and the change is at most -0.15, with "Rezultati sledenja so stabilni, pacient pa poroča slabše počutje.". Otherwise, or without a delta or a change, it does not diverge and has no sentence.
+
+# alert-rules
+As of a day, these :Trigger: rules are evaluated for a patient (reasons word for word).
+- `trend_drop`, yellow, source game: the latest `trace:all` snapshot with a delta has delta <= -10, and at least 2 of the up to 3 snapshots with a delta before it have delta <= -5. Reason "Rezultati sledenja so že več dni pod pacientovim izhodiščem."; extra `delta` (1 decimal), `sessionIds` (the counting trace sessions of those snapshot days) and `previousDeltas` (1 decimal).
+- `big_drop`, red, source game: that latest delta <= -20. Reason "Rezultati sledenja so močno padli pod pacientovo izhodišče."; extra `delta` and `sessionIds`.
+- `subjective_drop`, yellow, source checkin: over the check-ins of the last 14 days, per rating, the mean of the last 7 days minus the mean of the 7 before, with at least 2 check-ins in each week; it fires when wellbeing fell by at least 2 or pain rose by at least 2. Its day is the last recent check-in's day; reason "Pacient poroča slabše počutje kot prejšnji teden.", "Pacient poroča močnejšo bolečino kot prejšnji teden." or, both, "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden."; extra `wellbeingChange` and `painChange` (2 decimals or null) and `checkinIds` of the recent week.
+- `both`, red, source game: `trend_drop` and `subjective_drop` hold together; its day is the later of the two; reason "Padajo rezultati sledenja in počutje hkrati."; extra `delta`, `wellbeingChange`, `painChange`.
+
+# alert-merging
+Evaluating the alerts of a patient as of a day, after every ingested :Checkin: or :GameSession:, keeps at most one open (not closed) :Alert: per patient.
+- A trigger is suppressed when a clinician-closed alert of the patient (not one closed by `system`) has the same rule (as its rule or in its triggers), the trigger is not more severe than that alert, and either the trigger's day is on or before the closing day or the closing was less than 7 days before the evaluated day.
+- Without an open alert, the live triggers open a new one with status `new`, opened on the day, taking source, rule, severity and reason from the most severe trigger; at equal severity `both` beats `big_drop`, which beats the rest.
+- With an open alert, triggers whose (rule, day) it already lists are not appended again; a more severe or higher-priority trigger replaces its source, rule, severity and reason, and when it is more severe and the alert was `acknowledged`, the alert returns to `new` with the acknowledgement cleared.
+- Every appended trigger is listed in `evidence.triggers` as `{rule, severity, source, day, reason}`; `sessionIds` and `checkinIds` in the evidence are the sorted union of all live triggers'; `delta`, `previousDeltas`, `wellbeingChange`, `painChange` and `missedDays` take the latest value.
+- The alert's `diverging` flag and `evidence.divergence` follow the patient's divergence as of the day.
+- Created and updated times are "now" when the day is :Today:, otherwise noon UTC of that day.
+
+# missing-data-alerts
+A grey `no_data` alert (source missing, reason "Pacient že več dni nima nobenega vnosa ali meritve.", extra `missedDays`) opens for a patient without an open alert when the discharge was at least 4 days ago and at least 4 days have passed since the latest of their last check-in day, last session day and discharge date.
+- A sweep over all patients does this as of a day; it runs when the patient list is read and during the seed.
+- An open grey `no_data` alert closes by itself, closed by `system` with no outcome, as soon as the patient has a check-in or a session on or after its opening day, unless a live yellow or red trigger escalates it instead.
+
+# alert-api
+`GET /api/alerts?status=open|closed|all` (default `open`) lists alerts newest first, each with its patient's name.
+
+`POST /api/alerts/{alertId}/ack` with `clinicianId`, `close` (default false), `outcome` and `note` acknowledges an alert and optionally closes it, returning the alert.
+- An unknown alert is 404 "Opozorilo ne obstaja"; an unknown clinician is 404 "Zdravnik ne obstaja".
+- Closing without an outcome is 422 "Opozorila ni mogoče zapreti brez izbranega izida."; an alert already closed is 422 "Opozorilo je že zaprto.".
+- The first acknowledgement records the clinician's name and the time, and a `new` alert becomes `acknowledged`; closing sets status `closed`, the closer's name, the time and the outcome; a given note is stored; the updated time is always set.
+
+# patient-list
+`GET /api/patients` first runs the missing-data sweep as of :Today:, then returns :Today:, the triage counters and every patient, sorted by urgency (red, yellow, no_data, insufficient_data, stable), then newest open alert first, then sort order.
+- A patient with an open alert has the status of its severity (`no_data` for grey) and its reason; a grey one's reason is "Brez vnosa že N dni." counting to :Today:.
+- Otherwise N days without any entry (since the last entry, or the discharge), N >= 4, is `no_data` "Brez vnosa že N dni."; without a `trace:all` snapshot it is `insufficient_data` "Premalo sej za izhodišče (n od 4)." where n is the largest number of completed counting sessions of one level, at most 3; else `stable` with "Rezultati so nad izhodiščem." (improving), "Rezultati so nekoliko pod izhodiščem." (declining) or "Brez posebnosti; rezultati so blizu izhodišča.".
+- Each item has days since discharge, days to the next visit, the open alert id, diverging (the open alert's flag, otherwise the divergence as of :Today:), the game sparkline (day and delta of the last 21 `trace:all` snapshots with a delta) and the wellbeing sparkline (day and wellbeing of the last 21 check-ins).
+- Counters: `needsAttention` is red + yellow, `noData` is no_data, `stable` is stable + insufficient_data, `total` is all.
+
+# patient-detail
+`GET /api/patients/{patientId}` returns the patient with their :Pathway:, dates, days since discharge and to the next visit, status, reason and diverging as in the patient list, the open alert, and a summary: number of sessions and check-ins, last session and check-in days, and the latest `trace:all` delta and direction (`insufficient_data` when none). An unknown patient is 404 "Pacient ne obstaja" on every patient path.
+
+`GET /api/patients/{patientId}/timeline` returns :Today:, the discharge and next visit dates, all sessions (without raw data) by start time, all check-ins by day, all trend snapshots by day and all alerts by id, closed ones included.
+
+# patient-home
+`GET /api/patients/{patientId}/home` returns the patient's name, pathway code and name, hand (the affected side), :Today:, the self-check steps, whether all of them are done today, and the last day up to :Today: with any entry.
+- The steps are, in order, `ratings` (kind ratings, title "Počutje in bolečina", done when there is a check-in today) and one step per game level of the pathway with id `<gameType>:<level>`, kind game, title "Ravna črta", "Krog", "Labirint" for trace levels 1-3 (else "Stopnja N"), done when a completed session of that level exists today.
+
+# patient-feedback
+Patient feedback as of a day uses the `trace:all` snapshots with a delta up to that day, oldest first; it never shows a number.
+- Without any: tone `first`, trend `unknown`.
+- Tone: the latest delta minus the mean of the up to 5 deltas before it (0 when none) is `better` at >= 3, `lower` at <= -3, else `similar`.
+- Trend: `declining` when the patient has an open yellow or red alert with a game rule (`trend_drop`, `big_drop`, `both`) as its rule or in its triggers; else, comparing the latest delta with the one 5 session-days earlier (or the first), `declining` when latest <= -5 and at least 3 lower, `improving` when latest >= 5 and at least 3 higher, else `stable`.
+- Title and text come from [the feedback messages](resources/feedback_messages.md) by (tone, trend); `first` or `unknown` always gives the first-day message.
+
+`GET /api/patients/{patientId}/selfcheck/summary` returns that feedback for :Today:, the day, the number of game steps done today and in total, and the points of the last 14 days. `GET /api/patients/{patientId}/progress` returns the feedback, all points, all ratings (day, wellbeing, pain) up to :Today:, the day of the best delta (ties: the later day), the number of days with any entry in the last 7, the week goal 5, and the latest acknowledgement time of any of the patient's alerts.
+- A point is a day, its delta rounded to 1 decimal and a label: `lower` at <= -5, `better` at >= 5, else `usual`.
+
+# demo-history
+Seeding the demo also replays each :DemoStory:'s history, day by day, from the day after the earliest discharge up to yesterday.
+- With :Today: fixed to the replayed day, each story's plan of day k (days since discharge, k >= 1) is written through the ingest service: first the check-in at hour h-1, minute 30, then one completed trace session per level at hour h, minute 5 x level, where h = 8 + (sum of the character codes of the patient id) mod 9. Then the missing-data sweep runs, then the story's clinician actions of day k are applied to the patient's open alert as clinician `c1`. Today itself only gets the sweep.
+- A session's score is preset from the story (version :StandinVersion:, class by :ImpairmentClass:); its features and synthetic trace come from [the trace generator](resources/seed_traces.py), with the stored features `dev_mean` (mean_dev / 0.06, 3 decimals), `duration_s`, `n_pauses` (round(pause_rate_hz x duration_s / 4)) and `n_lifts`.
+- The client meta is `touch` 360x360 at pixel ratio 3 or `mouse` 480x480 at pixel ratio 2, with user agent "seed (touch)" or "seed (mouse)", by the story's input device.

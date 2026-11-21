@@ -1,0 +1,14 @@
+---
+module: backend
+func_id: alert-api
+---
+
+***conformance tests***
+
+# list-alerts
+`GET /api/alerts?status=all` answers 200 with a list, and each alert in it has a `patientName`, a `severity` of red, yellow or grey and a `status` of new, acknowledged or closed.
+
+***acceptance tests***
+
+# unknown-alert
+`POST /api/alerts/999999/ack` with clinicianId "c1" answers 404.

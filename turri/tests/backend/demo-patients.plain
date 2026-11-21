@@ -1,0 +1,9 @@
+---
+module: backend
+func_id: demo-patients
+---
+
+***conformance tests***
+
+# reset-seeds-ten-patients
+`POST /api/admin/reset` answers 200 with `ok` true and `patients` 10.

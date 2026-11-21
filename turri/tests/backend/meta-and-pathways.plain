@@ -1,0 +1,12 @@
+---
+module: backend
+func_id: meta-and-pathways
+---
+
+***conformance tests***
+
+# meta-today-and-defaults
+`GET /api/meta` answers 200 with `today` "2026-11-21", `syntheticData` true, `defaultPatientId` "p3", `modelVersion` "standin-0.1", one clinician with id "c1", and `outcomes` with the six :Outcome: ids.
+
+# two-pathways
+`GET /api/pathways` answers 200 with the codes "stroke" and "ctr", each with one game of type "trace" and levels [1, 2, 3], and the questions "wellbeing" and "pain".

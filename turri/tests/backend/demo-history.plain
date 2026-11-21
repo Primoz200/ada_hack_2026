@@ -1,0 +1,15 @@
+---
+module: backend
+func_id: demo-history
+---
+
+***conformance tests***
+
+# history-is-replayed
+After a reset, `GET /api/patients/p3/timeline` has trace sessions of levels 1, 2 and 3 and check-ins, all on days before "2026-11-21".
+
+# clinician-closed-alert
+After a reset, `GET /api/alerts?status=closed` has an alert of patient "p5" closed by "dr. Ana Novak" with outcome "called_reassured".
+
+# open-alerts-need-attention
+After a reset, `GET /api/patients` has `counters.needsAttention` of at least 1.

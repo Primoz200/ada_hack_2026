@@ -1,0 +1,48 @@
+# turri config for regenerating the platform backend (backend/app) from ***plain specs.
+# backend/models/ (tracer + camera models) is NOT regenerated - the spec only calls into it.
+# Credentials: never here. They live in ~/.config/turri/bedrock.env (see turri/run.sh).
+
+module: backend.plain
+
+# Models: OpenAI GPT on Amazon Bedrock (global inference profile).
+harness-model: amazon-bedrock/global.openai.gpt-6-astra:medium   # writes specs, plans pulses
+coding-model: amazon-bedrock/global.openai.gpt-6-luna:medium     # writes code + unit tests
+judge-model: amazon-bedrock/global.openai.gpt-6-astra:high       # judges failing conformance runs
+
+models:
+  planner: { model: amazon-bedrock/global.openai.gpt-6-astra, thinking: medium }
+  diagnosis: { model: amazon-bedrock/global.openai.gpt-6-astra, thinking: medium }
+  debugger: { model: amazon-bedrock/global.openai.gpt-6-astra, thinking: medium }
+  test-reviewer: { model: amazon-bedrock/global.openai.gpt-6-astra, thinking: medium }
+  coding: { model: amazon-bedrock/global.openai.gpt-6-luna, thinking: medium, turn-limit: 180 }
+
+# Black-box tests of each functional spec (tests/backend/<func-id>.plain). Slower, but they
+# are what proves the regenerated backend matches the current one.
+conformance-tests: true
+review: false
+mutation-testing: true
+
+# Headless runs: nothing launched in the background, no sentinel chat.
+launch-after-pulse: false
+sentinel: false
+allow-to-stop-jobs: true
+
+testing-scripts-run-on: in-place
+turn-limit: 120
+parallel-jobs: 2
+compact-at: 100000
+max-specs-per-pulse: 3
+max-lines-per-pulse: 120
+rules-off: [integration-embedded, integration-embedded-testing, integration-standalone]
+
+agent-env:
+  files: []
+  vars: []
+toolchains: []
+ledger-keep: 100
+cache-keep: 4096
+debug: false
+
+test-dir: tests
+unittests-script: test_scripts/run_unittests_python.sh
+conformance-tests-script: test_scripts/run_conformance_tests_python.sh

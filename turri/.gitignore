@@ -1,0 +1,6 @@
+plain_modules/
+.turri/
+report*.json
+*.log
+.env
+*.env

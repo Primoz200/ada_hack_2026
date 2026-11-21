@@ -1,0 +1,12 @@
+---
+module: backend
+func_id: patient-list
+---
+
+***conformance tests***
+
+# list-all-patients
+After a reset, `GET /api/patients` answers 200 with `today` "2026-11-21", ten patients, `counters.total` 10, and `needsAttention` + `noData` + `stable` equal to 10.
+
+# sorted-by-urgency
+After a reset, the patients of `GET /api/patients` are in order of status red, yellow, no_data, insufficient_data, stable.

@@ -1,0 +1,20 @@
+---
+module: backend
+func_id: checkins
+---
+
+***conformance tests***
+
+# store-checkin
+After a reset, `POST /api/checkins` for patient "p9" with wellbeing 7 and pain 3 answers 200 with an integer `checkinId`.
+
+# same-day-replaces
+After a reset, two check-ins of patient "p9" on the same day answer with the same `checkinId`.
+
+***acceptance tests***
+
+# unknown-patient
+A check-in for patient "nobody" answers 404.
+
+# rating-out-of-range
+A check-in for patient "p9" with wellbeing 11 answers 422.

@@ -1,0 +1,20 @@
+---
+module: backend
+func_id: sessions
+---
+
+***conformance tests***
+
+# completed-trace-is-scored
+After a reset, a completed trace session of patient "p9", level 1, hand "right", with a target line from (0.1, 0.5) to (0.9, 0.5) and a trace along it, answers 200 with an integer `sessionId` and `scored` true; `GET /api/sessions/{sessionId}/raw` then answers with that level, a numeric score and the same series.
+
+# aborted-is-not-scored
+After a reset, an aborted trace session (completed false, abortReason "cannot_today") of patient "p9" answers 200 with `scored` false, and its raw data has a null score.
+
+***acceptance tests***
+
+# unknown-trace-level
+A completed trace session of patient "p9" at level 4 answers 422.
+
+# unknown-session-raw
+`GET /api/sessions/999999/raw` answers 404.
