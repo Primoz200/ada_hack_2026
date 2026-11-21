@@ -33,3 +33,20 @@ ima na voljo. Hkrati lahko spremljamo napredek pacientov, zdravnik lahko na hitr
 
 #### Pridobitev čim bolj reprezentativnih in objektivnih podatkov
 
+
+Namesto subjektivnih lestvic pacient doma igra kratke igre, ki objektivno merijo motorične sposobnosti (čas, natančnost,
+gladkost giba, tremor, obseg giba). Samoocena na lestvici 0–10 se je v primerjavi s skritim pospeškomerom izkazala za
+neveljavno in nezanesljivo (Nicolson 2018), igre, dodane običajni terapiji, pa izboljšajo funkcijo roke (Cochrane 2025, SMD 0,42).
+Podrobni dokazi, viri in parametri so v [RESEARCH.md](RESEARCH.md).
+
+**Tri igre (MVP najprej z miško, telefon kasneje):**
+1. **Sledi poti (tracing + Fittsovo ciljanje)** – črta → krog → spirala → labirint. Meri čas, RMS odstopanje od poti,
+   gladkost (jerk/SPARC), throughput. Kap (metrike dosega ~ Fugl-Meyer), CTS (spirala + SVM: 82 % sens., 71 % spec.).
+2. **MediaPipe kamera** – »ritem prstov« (tapping palec–kazalec, MediaPipe Hands) in »doseži zvezde«
+   (abdukcija ramena, kompenzacija trupa, simetrija; MediaPipe Pose). ICC 0,75–0,96, absolutni koti manj natančni → % lastnega izhodišča.
+3. **Telefon kot krmilnik (DeviceOrientation/Motion)** – zapestni »sef« (ROM po CTR), »drži kozarec« (tremor 3–12 Hz),
+   »ravnotežni surfer« (nihanje pri CIPN) + tapping podtest. Wow: QR koda → telefon postane krmilnik. Rezerva: tapping na dotik.
+
+**ML:** sintetični podatki iz pravil (+ preverjanje na javnih nizih UCI spirale, KIMORE), baseline na značilkah + 1D-CNN,
+izhod ocena 0–100 + razred (normalno/blago/zmerno/hudo), nivo kot vhod. Glavni klinični signal je **trend glede na
+pacientovo lastno izhodišče** (z-vrednost / RCI, EWMA), ker se rezultati med ljudmi zelo razlikujejo.
