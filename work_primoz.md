@@ -54,3 +54,5 @@
 - Rezultati (test, MAE proti resnici): **GBM 6,45**, razred 78 %; **CNN 6,85**, razred 78 %; nobeden ne zgreši za več kot 1 razred. CNN se preprilega (train loss 1,2). Pričakovano: na sintetiki so ročne značilke skoraj vse, kar generator vsebuje.
 - Naslednje: odločitev, kaj gre v backend (GBM / CNN / povprečje), `score_session`, snemalnik za realne poskuse.
 - Primerjava velikosti CNN (graf `backend/models/data/tracer_training.jpg`, skripta `plot_training.py`): Dropout1d v konvolucijah odpravi preprileganje; manjše mreže (širina 32/16/8, dropout 0,3) se podprilegajo. Privzeto zdaj širina 64, dropout 0,1 → test MAE 6,76 (GBM 6,45). Nadaljnje izboljšave (daljši trening, povprečje GBM+CNN) počakajo na realne podatke.
+- `score_session` (povezava backend ↔ model) bo verjetno naredil Matevž; vse potrebno je v `features.py` (preprocess, extract_features), `common.py` (score_to_class) in `artifacts/` (tracer_gbm.joblib, tracer_cnn.pt). Venv: `~/venvs/ada_models`.
+- **Naslednji korak:** model za CV igro (MediaPipe: odpiranje dlani, abdukcija ramen, dvig rok).
