@@ -53,3 +53,23 @@
 
 **Spremembe:** v `.claude/skills/` ustvarjeni simbolni povezavi `impeccable` in `hallmark` → `.agents/skills/…`, da sta skilla na voljo tako v Codexu kot v Claude Code (`/impeccable`, `/hallmark`).
 **Ključno naučeno:** Claude Code bere skille iz `.claude/skills`, Codex iz `.agents/skills`; simbolna povezava odpravi podvajanje. Zaganjalnik skilla impeccable ob prvi uporabi prenese binarno datoteko.
+
+## 2026-11-21 (18.45) — Ogrodje platforme in orkestracija agentov (branch `matevz/platform`)
+
+**Odločitve (Matevž):**
+- Vso kodo platforme in ves frontend (tudi igro sledenja) implementira Matevž z agenti; Primož prispeva raziskavo, kontekst in ML modele v backendu. `IMPLEMENTATION_PLAN.md` posodobljen na v7.
+- Obseg tega zagona: jedro (poglavje 2) + »Simuliraj naslednjih 7 dni«. Igra s kamero ni vključena.
+- Način dela: Fable orkestrira, Sonnet agenti v ločenih worktreejih gradijo neodvisne komponente.
+
+**Narejeno (faza 0, commit `f7fe053`):**
+- `backend/`: FastAPI + SQLModel, tabele (`app/models/tables.py`), pogodba API v camelCase (`app/models/schemas.py`), routerji, podpisi storitev (`scoring`, `trend`, `alerts`, `ingest`, `clock`, `divergence`), majhen razvojni seed, dimni test.
+- `contracts/openapi.json` + `scripts/gen_contract.sh` (izvoz in generiranje TS tipov, `--check` za odstopanje pogodbe), `scripts/dev.sh`.
+- `frontend/`: Vite + React 19 + Tailwind 4 + shadcn + Recharts, vse poti registrirane, tipiziran odjemalec API, vmesnik iger (`games/shared/types.ts`), register iger, nadomestna igra.
+- Navpični rez deluje prek Vite proxyja (HTTPS): seja se shrani in vrne v časovnici.
+
+**V teku (faza 1, vzporedno):** pisalna pot (točkovanje, trend, opozorila), bralna pot (seznam za triažo, danes, napredek), pacientov vmesnik + igra sledenja, zdravnikov vmesnik. Sledi seed z 10 pacienti + simulacija, nato integracija.
+
+**Ključno naučeno:**
+- Python pripet na 3.12 z `uv` (sistemski je 3.15). SQLModel 0.0.50 zahteva časovne žige s časovnim pasom (UTC).
+- `openapi-typescript` zahteva TypeScript 5, aplikacija uporablja 7, zato se generator zažene zunaj projekta z `npx -p typescript@5`.
+- Kamera na telefonu: Vite teče s samopodpisanim HTTPS (`@vitejs/plugin-basic-ssl`), `/api` gre prek proxyja.
