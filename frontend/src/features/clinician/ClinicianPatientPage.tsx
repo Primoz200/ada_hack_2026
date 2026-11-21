@@ -1,13 +1,16 @@
 // Patient detail for the clinician. Plan section 9, Zdravnik 2 and 3.
+// Header (who, and when the next visit is) -> the alert -> the evidence -> how it was captured -> history.
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
-import { ArrowLeft } from 'lucide-react'
-import { api, unwrap, type SessionSummary, type Timeline } from '@/client/api'
+import { ArrowLeft, CalendarClock } from 'lucide-react'
+import { api, unwrap, type PatientDetail, type SessionSummary, type Timeline } from '@/client/api'
 import { paths } from '@/app/paths'
+import { Panel } from '@/components/app/Panel'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 import { useAsync } from '@/lib/useAsync'
 import { AlertCard } from './AlertCard'
+import { Y_AXIS_WIDTH, CHART_MARGIN } from './chartLayout'
 import { GameChart, regionWord, type View } from './GameChart'
 import { ActionLog, CheckinHistory, ModelNote } from './PatientSections'
 import { SessionReplay } from './SessionReplay'
@@ -16,18 +19,22 @@ import {
   LEVELS,
   LEVEL_NAMES,
   ageFrom,
+  dayMs,
   deltaWords,
   featureComparison,
   formatDay,
   formatFeature,
+  formatPct,
   nextVisitText,
   plural,
   timeDomain,
   trendSummary,
+  visitWhen,
 } from './model'
-import { PageState, StatusBadge } from './ui'
+import { ErrorState, StatusBadge, UnderlineTabs } from './ui'
 
 const MIN_SESSIONS_FOR_BASELINE = 4 // session 1 is practice, baseline = sessions 2-4
+const SIDE_COL = 'grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1fr)_19rem]'
 
 export function ClinicianPatientPage() {
   const { patientId = '' } = useParams()
@@ -44,10 +51,12 @@ export function ClinicianPatientPage() {
 
   if ((patient.error && !patient.data) || (timeline.error && !timeline.data)) {
     return (
-      <div className="space-y-4">
+      <>
         <BackLink />
-        <PageState>Pacienta ni mogoče naložiti: {(patient.error ?? timeline.error)?.message}</PageState>
-      </div>
+        <Panel>
+          <ErrorState title="Podatkov o pacientu ni mogoče naložiti." message={(patient.error ?? timeline.error)?.message} onRetry={reload} />
+        </Panel>
+      </>
     )
   }
   if (!patient.data || !timeline.data) return <PageSkeleton />
@@ -60,7 +69,8 @@ export function ClinicianPatientPage() {
   const replayLevel = view !== 'all' ? view : (traceSessions.find((s) => s.id === selectedId)?.level ?? latest?.level ?? 1)
   const levelList = traceSessions.filter((s) => s.level === replayLevel).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
   const selected: SessionSummary | null = levelList.find((s) => s.id === selectedId) ?? levelList[levelList.length - 1] ?? null
-  const latestCheckin = [...tl.checkins].sort((a, b) => b.day.localeCompare(a.day) || b.id - a.id)[0]
+  // the next visit is often weeks beyond the chart: say so at the chart's right edge
+  const visitBeyond = tl.nextVisitDate != null && dayMs(tl.nextVisitDate) > domain.end ? p.daysToNextVisit : null
 
   const select = (s: SessionSummary) => {
     setSelectedId(s.id)
@@ -68,102 +78,147 @@ export function ClinicianPatientPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
       <BackLink />
+      <PatientHeader p={p} today={tl.today} />
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{p.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground" data-testid="patient-meta">
-            {ageFrom(p.birthYear, tl.today)} let · {p.pathway.name} · {p.side === 'left' ? 'leva' : 'desna'} roka · dan {p.daysSinceDischarge} po odpustu
-            (odpust {formatDay(p.dischargeDate)}) · {nextVisitText(p.daysToNextVisit)}
-            {p.nextVisitDate && ` (${formatDay(p.nextVisitDate)})`}
-          </p>
-        </div>
-        <StatusBadge status={p.status} className="text-sm" />
-      </header>
+      <div className="space-y-6">
+        {p.openAlert ? (
+          <AlertCard alert={p.openAlert} patient={p} today={tl.today} meta={meta.data} onChanged={reload} />
+        ) : (
+          <Panel className="flex flex-wrap items-center gap-x-4 gap-y-2 py-6 md:py-7" data-testid="status-panel">
+            <StatusBadge status={p.status} size="lg" />
+            <p className="text-lg">{p.reason}</p>
+            <span className="text-[0.9375rem] text-muted-foreground lg:ml-auto">Ni odprtega opozorila.</span>
+          </Panel>
+        )}
 
-      {p.openAlert ? (
-        <AlertCard alert={p.openAlert} meta={meta.data} latestCheckin={latestCheckin} onChanged={reload} />
-      ) : (
-        <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm">
-          <StatusBadge status={p.status} />
-          <span className={p.status === 'stable' ? 'text-muted-foreground' : ''}>{p.reason}</span>
-        </div>
-      )}
-
-      <ModelNote meta={meta.data} />
-
-      <Section title="Rezultati iger glede na lastno izhodišče">
-        <Tabs value={String(view)} onValueChange={(v) => setView(v === 'all' ? 'all' : (Number(v) as View))}>
-          <TabsList>
-            <TabsTrigger value="all">Skupaj</TabsTrigger>
-            {LEVELS.map((l) => (
-              <TabsTrigger key={l} value={String(l)}>
-                {LEVEL_NAMES[l]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_18rem] gap-6">
-          <div>
-            <GameChart timeline={tl} view={view} domain={domain} selectedId={selected?.id ?? null} onSelectSession={select} />
-            <ChartLegend isAll={view === 'all'} />
+        <Panel>
+          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+            <h2 className="text-2xl font-bold">Rezultati sledenja glede na lastno izhodišče</h2>
+            <UnderlineTabs
+              label="Stopnja igre"
+              value={String(view)}
+              onChange={(v) => setView(v === 'all' ? 'all' : (Number(v) as View))}
+              items={[{ id: 'all', label: 'Skupaj' }, ...LEVELS.map((l) => ({ id: String(l), label: LEVEL_NAMES[l] }))]}
+            />
           </div>
-          <BasisPanel tl={tl} view={view} />
-        </div>
 
-        <h3 className="mt-6 mb-1 text-sm font-semibold">Simptomi iz dnevnih vnosov</h3>
-        <div className="grid grid-cols-[minmax(0,1fr)_18rem] gap-6">
-          <SymptomPanel timeline={tl} questions={p.pathway.questions} domain={domain} />
-          <p className="pt-3 text-xs text-muted-foreground">
-            Vsako vprašanje ima svojo os; lestvici z nasprotno smerjo nista nikoli na isti osi. Čas je poravnan z grafom zgoraj.
-            Rdeča črtkana črta označuje dan z opozorilnim znakom.
-          </p>
-        </div>
-      </Section>
+          <div className={cn(SIDE_COL, 'mt-6')}>
+            <div className="relative min-w-0">
+              {visitBeyond != null && (
+                <span
+                  className="pointer-events-none absolute -top-6 z-10 text-[0.875rem] font-semibold text-primary"
+                  style={{ right: CHART_MARGIN.right }}
+                >
+                  naslednji pregled {visitWhen(visitBeyond)} →
+                </span>
+              )}
+              <GameChart timeline={tl} view={view} domain={domain} selectedId={selected?.id ?? null} onSelectSession={select} />
+              <ChartLegend isAll={view === 'all'} />
+            </div>
+            <BasisPanel tl={tl} view={view} />
+          </div>
 
-      <div id="replay">
-        <Section title="Predvajanje seje" subtitle="Kako se zajame podatek: dejanska sled čez želeno črto, ob njej seja iz izhodišča.">
+          <div className={cn(SIDE_COL, 'mt-8 border-t border-border pt-6')}>
+            <div className="min-w-0">
+              <h3 className="mb-3 text-lg font-bold" style={{ paddingLeft: Y_AXIS_WIDTH }}>
+                Počutje in bolečina
+              </h3>
+              <SymptomPanel timeline={tl} questions={p.pathway.questions} domain={domain} />
+            </div>
+            <p className="self-center text-[0.9375rem] text-muted-foreground">
+              Pacientova dnevna ocena od 1 do 10. Vsaka ocena ima svojo os, ker gresta lestvici v nasprotni smeri. Čas je poravnan z grafom zgoraj; navpične črte so opozorila.
+            </p>
+          </div>
+
+          <div className="mt-6 border-t border-border pt-5">
+            <ModelNote meta={meta.data} />
+          </div>
+        </Panel>
+
+        <Panel id="replay">
+          <h2 className="text-2xl font-bold">Predvajanje seje</h2>
+          <p className="mt-1 mb-6 text-[0.9375rem] text-muted-foreground">Kako se zajame podatek: dejanska sled čez želeno črto, ob njej seja iz izhodišča.</p>
           <SessionReplay sessions={traceSessions} level={replayLevel} selected={selected} onSelect={(s) => setSelectedId(s.id)} />
-        </Section>
+        </Panel>
+
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+          <Section title="Dnevne ocene" hint="Zadnjih 14 vnosov. Počutje: višje je bolje. Bolečina: višje je slabše.">
+            <CheckinHistory checkins={tl.checkins} pathway={p.pathway} />
+          </Section>
+          <Section title="Dnevnik ukrepov" hint="Opozorila in kaj je zdravnik storil.">
+            <ActionLog alerts={tl.alerts} meta={meta.data} />
+          </Section>
+        </div>
       </div>
-
-      <Section title="Dnevni vnosi">
-        <CheckinHistory checkins={tl.checkins} pathway={p.pathway} />
-      </Section>
-
-      <Section title="Dnevnik ukrepov">
-        <ActionLog alerts={tl.alerts} messages={tl.messages} meta={meta.data} />
-      </Section>
-    </div>
+    </>
   )
 }
 
 function BackLink() {
   return (
-    <Link to={paths.clinician} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <Link
+      to={paths.clinician}
+      className="mb-3 ml-2 inline-flex items-center gap-1.5 rounded-md text-[0.9375rem] font-medium text-primary hover:underline"
+    >
       <ArrowLeft className="size-4" aria-hidden /> Pregled pacientov
     </Link>
   )
 }
 
-function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
+/** Who the patient is, and, prominently, how far away the next planned visit is. */
+function PatientHeader({ p, today }: { p: PatientDetail; today: string }) {
+  const side = p.side === 'left' ? 'leva roka' : 'desna roka'
   return (
-    <section className="rounded-xl border bg-card p-5">
-      <h2 className="text-base font-semibold">{title}</h2>
-      {subtitle && <p className="mb-3 text-sm text-muted-foreground">{subtitle}</p>}
-      <div className={subtitle ? '' : 'mt-3'}>{children}</div>
-    </section>
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-x-10 gap-y-4 px-2">
+      <div className="min-w-0">
+        <h1 className="text-[2.25rem] leading-tight font-bold">{p.name}</h1>
+        <p className="mt-1 text-lg text-muted-foreground" data-testid="patient-meta">
+          {ageFrom(p.birthYear, today)} let<Sep />
+          {p.pathway.name}<Sep />
+          {side}<Sep />
+          <span className="text-foreground">{p.daysSinceDischarge}. dan po odpustu</span>
+        </p>
+      </div>
+      <div className="flex items-center gap-3.5" data-testid="next-visit" aria-label={nextVisitText(p.daysToNextVisit)}>
+        <CalendarClock className="size-8 text-primary" strokeWidth={1.75} aria-hidden />
+        <div>
+          <div className="text-[0.9375rem] font-medium text-muted-foreground">Naslednji pregled</div>
+          <div className="text-[1.625rem] leading-tight font-bold">
+            {visitWhen(p.daysToNextVisit)}
+            {p.nextVisitDate && <span className="tabular ml-2 text-lg font-medium text-muted-foreground">{formatDay(p.nextVisitDate)}</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Sep() {
+  return (
+    <span className="mx-2 text-input" aria-hidden>
+      ·
+    </span>
+  )
+}
+
+function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <Panel>
+      <h2 className="text-2xl font-bold">{title}</h2>
+      {hint && <p className="mt-1 text-[0.9375rem] text-muted-foreground">{hint}</p>}
+      <div className="mt-5">{children}</div>
+    </Panel>
   )
 }
 
 function ChartLegend({ isAll }: { isAll: boolean }) {
   return (
-    <p className="mt-1 text-xs text-muted-foreground" style={{ paddingLeft: 56 }}>
+    <p className="mt-2 text-[0.875rem] text-muted-foreground" style={{ paddingLeft: Y_AXIS_WIDTH }}>
       {isAll
-        ? 'Črta: skupni trend (povprečen odmik stopenj od lastnega izhodišča). Siv pas: izhodišče ±5 točk. Črtkano: prag opozorila.'
-        : 'Bledi krogi: posamezne seje (klik odpre predvajanje). Črta: glajen rezultat. Moder pas: izhodišče ±5 točk. Navpične črte: opozorila in pregledi.'}
+        ? 'Črta: skupni trend vseh treh stopenj glede na lastno izhodišče. Modri pas: izhodišče ±5 točk. Črtkano: prag opozorila.'
+        : 'Bledi krogi: posamezne seje (klik odpre predvajanje). Črta: glajen rezultat. Modri pas: izhodišče ±5 točk.'}
     </p>
   )
 }
@@ -180,58 +235,48 @@ function BasisPanel({ tl, view }: { tl: Timeline; view: View }) {
   const latestScore = view === 'all' ? null : [...scoped].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0]?.score
 
   return (
-    <aside className="space-y-4 text-sm" data-testid="basis-panel">
+    <aside className="min-w-0 space-y-7" data-testid="basis-panel">
       <div>
-        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Sprememba glede na izhodišče</h3>
-        {noBaseline ? (
-          <p className="mt-1 font-medium">Premalo sej za izhodišče</p>
-        ) : (
-          <p className="mt-1 text-lg leading-tight font-semibold">{deltaWords(sum.delta)}</p>
-        )}
-        <p className="mt-1 text-muted-foreground">
-          Temelji na {n} {plural(n, 'seji', 'sejah', 'sejah', 'sejah')}
+        <h3 className="text-[0.9375rem] font-medium text-muted-foreground">Sprememba glede na izhodišče</h3>
+        <p className="mt-1 text-[1.625rem] leading-tight font-bold">{noBaseline ? 'Še ni izhodišča' : capitalize(deltaWords(sum.delta))}</p>
+        <p className="mt-1.5 text-[0.9375rem] text-muted-foreground">
+          Na podlagi {n} {plural(n, 'seje', 'sej', 'sej', 'sej')}
           {view !== 'all' && sum.baseline != null && <>; izhodišče: {regionWord(sum.baseline)}</>}
           {latestScore != null && <>; zadnja seja: {regionWord(latestScore)}</>}.
+          {noBaseline && <> Prva seja je vaja, izhodišče je mediana sej 2–4, zato so potrebne vsaj {MIN_SESSIONS_FOR_BASELINE} seje.</>}
         </p>
-        {noBaseline && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Prva seja je vaja; izhodišče je mediana sej 2–4, torej so potrebne vsaj {MIN_SESSIONS_FOR_BASELINE} seje (zdaj: {n}).
-          </p>
-        )}
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Kaj se je najbolj premaknilo</h3>
+        <h3 className="text-[0.9375rem] font-medium text-muted-foreground">Kaj se je najbolj premaknilo</h3>
         {fc.rows.length === 0 ? (
-          <p className="mt-1 text-muted-foreground">Za primerjavo značilk je premalo sej (potrebnih je vsaj 5 na stopnjo).</p>
+          <p className="mt-1.5 text-[0.9375rem]">Za primerjavo značilk je premalo sej (potrebnih je vsaj 5 na stopnjo).</p>
         ) : (
           <>
-            <table className="mt-1 w-full text-xs" data-testid="feature-table">
+            <table className="mt-2 w-full text-[0.9375rem]" data-testid="feature-table">
               <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="pb-1 font-medium">Značilka</th>
-                  <th className="pb-1 pl-2 text-right font-medium">Izhodišče</th>
-                  <th className="pb-1 pl-2 text-right font-medium">Zadnje</th>
-                  <th className="pb-1 pl-2 text-right font-medium">Sprememba</th>
+                <tr className="text-left text-[0.8125rem] text-muted-foreground">
+                  <th className="pb-1.5 font-medium">Značilka</th>
+                  <th className="pb-1.5 pl-2 text-right font-medium">Prej</th>
+                  <th className="pb-1.5 pl-2 text-right font-medium">Zdaj</th>
+                  <th className="pb-1.5 pl-2 text-right font-medium">Sprememba</th>
                 </tr>
               </thead>
               <tbody>
                 {fc.rows.map((r) => (
-                  <tr key={`${r.level}-${r.key}`} className="border-t align-top">
-                    <td className="py-1 pr-1">
+                  <tr key={`${r.level}-${r.key}`} className="border-t border-border align-top">
+                    <td className="py-2 pr-1 leading-snug">
                       {r.label}
-                      {view === 'all' && <span className="block text-muted-foreground">{LEVEL_NAMES[r.level]}</span>}
+                      {view === 'all' && <span className="block text-[0.8125rem] text-muted-foreground">{LEVEL_NAMES[r.level]}</span>}
                     </td>
-                    <td className="py-1 pl-2 text-right tabular-nums">{formatFeature(r.baseline)}</td>
-                    <td className="py-1 pl-2 text-right tabular-nums">{formatFeature(r.recent)}</td>
-                    <td className="py-1 pl-2 text-right font-medium tabular-nums">
-                      {r.changePct == null ? '–' : `${r.changePct > 0 ? '+' : '−'}${Math.abs(Math.round(r.changePct))} %`}
-                    </td>
+                    <td className="tabular py-2 pl-2 text-right text-muted-foreground">{formatFeature(r.baseline)}</td>
+                    <td className="tabular py-2 pl-2 text-right text-muted-foreground">{formatFeature(r.recent)}</td>
+                    <td className="tabular py-2 pl-2 text-right font-semibold">{formatPct(r.changePct)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="mt-1 text-xs text-muted-foreground">Povprečje sej 2–4 proti zadnjim trem sejam.</p>
+            <p className="mt-2 text-[0.8125rem] text-muted-foreground">Prej: povprečje sej 2–4. Zdaj: zadnje tri seje.</p>
           </>
         )}
       </div>
@@ -239,13 +284,31 @@ function BasisPanel({ tl, view }: { tl: Timeline; view: View }) {
   )
 }
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
 function PageSkeleton() {
   return (
-    <div className="space-y-4" aria-busy>
-      <Skeleton className="h-5 w-40" />
-      <Skeleton className="h-8 w-72" />
-      <Skeleton className="h-40 w-full" />
-      <Skeleton className="h-80 w-full" />
+    <div aria-busy>
+      <BackLink />
+      {/* on the blue-grey page the skeleton bars are white; inside panels they are the muted fill */}
+      <div className="mb-6 flex items-end justify-between px-2">
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-72 bg-card" />
+          <Skeleton className="h-6 w-96 bg-card" />
+        </div>
+        <Skeleton className="h-14 w-56 bg-card" />
+      </div>
+      <div className="space-y-6">
+        <Panel className="space-y-4">
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-8 w-[28rem]" />
+          <Skeleton className="h-12 w-80" />
+        </Panel>
+        <Panel className="space-y-6">
+          <Skeleton className="h-8 w-96" />
+          <Skeleton className="h-80 w-full" />
+        </Panel>
+      </div>
     </div>
   )
 }

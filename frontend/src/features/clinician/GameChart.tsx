@@ -1,5 +1,5 @@
 // Game chart: combined trend (points vs own baseline) or one level (sessions as faded dots, EWMA line, baseline band).
-// Shares its x axis (time, same domain, same margins) with the symptom panel below.
+// Shares its x axis (time, same domain, same margins) with the rating charts below.
 import { CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine, Scatter, Tooltip, XAxis, YAxis } from 'recharts'
 import type { SessionSummary, Timeline } from '@/client/api'
 import { useChartWidth } from './useChartWidth'
@@ -17,7 +17,7 @@ import {
   type ChartRow,
   type TimeDomain,
 } from './model'
-import { CHART_MARGIN, Y_AXIS_WIDTH, markerStyle, shortDay } from './chartLayout'
+import { AXIS_LABEL_STYLE, AXIS_TICK, CHART_MARGIN, Y_AXIS_WIDTH, markerStyle, shortDay } from './chartLayout'
 
 export type View = 'all' | 1 | 2 | 3
 
@@ -43,7 +43,7 @@ interface Props {
   height?: number
 }
 
-export function GameChart({ timeline, view, domain, selectedId, onSelectSession, height = 300 }: Props) {
+export function GameChart({ timeline, view, domain, selectedId, onSelectSession, height = 320 }: Props) {
   const [ref, width] = useChartWidth()
   const markers = chartMarkers(timeline, domain)
   const ticks = dayTicks(domain)
@@ -53,16 +53,17 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
   const hasData = rows.some((r) => (isAll ? r.delta != null : r.ewma != null || r.score != null))
 
   const vals = rows.map((r) => r.delta).filter((v): v is number => v != null)
+  // fixed floor and ceiling, widened only when the data goes beyond them
   const yDomain: [number, number] = isAll
-    ? [Math.floor(Math.min(-20, ...vals) / 5) * 5 - 5, Math.ceil(Math.max(12, ...vals) / 5) * 5 + 5]
+    ? [Math.min(-25, Math.floor(Math.min(...vals, 0) / 5) * 5 - 5), Math.max(15, Math.ceil(Math.max(...vals, 0) / 5) * 5 + 5)]
     : [0, 100]
   const byId = new Map(timeline.sessions.map((s) => [s.id, s]))
 
   return (
     <div ref={ref} className="relative w-full" style={{ height }} data-testid="game-chart">
       {width > 0 && (
-        <ComposedChart width={width} height={height} data={rows} margin={{ ...CHART_MARGIN, top: 22 }}>
-          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+        <ComposedChart width={width} height={height} data={rows} margin={{ ...CHART_MARGIN, top: 26 }}>
+          <CartesianGrid stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="t"
             type="number"
@@ -70,35 +71,37 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
             domain={[domain.start, domain.end]}
             ticks={ticks}
             tickFormatter={shortDay}
-            tick={{ fontSize: 11 }}
+            tick={AXIS_TICK}
+            stroke="var(--border)"
+            tickLine={false}
             allowDataOverflow
           />
           <YAxis
             width={Y_AXIS_WIDTH}
             domain={yDomain}
+            ticks={isAll ? undefined : [0, 40, 65, 85, 100]}
             allowDataOverflow
-            tick={{ fontSize: 11 }}
-            tickFormatter={(v: number) => (isAll && v > 0 ? `+${v}` : String(v))}
+            tick={AXIS_TICK}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v: number) => (isAll && v > 0 ? `+${v}` : v < 0 ? `−${-v}` : String(v))}
             label={{
-              value: isAll ? 'točke glede na izhodišče' : 'rezultat sej (0–100)',
+              value: isAll ? 'točke glede na izhodišče' : 'rezultat seje (0–100)',
               angle: -90,
               position: 'insideLeft',
-              offset: 8,
-              style: { fontSize: 11, textAnchor: 'middle', fill: 'var(--muted-foreground)' },
+              offset: 4,
+              style: AXIS_LABEL_STYLE,
             }}
           />
 
           {!isAll &&
-            REGIONS.map((r, i) => (
-              <ReferenceArea
+            REGIONS.map((r) => (
+              <ReferenceLine
                 key={r.label}
-                y1={r.y1}
-                y2={r.y2}
-                fill="var(--muted)"
-                fillOpacity={i % 2 === 0 ? 0.55 : 0.2}
+                y={r.y1}
                 stroke="none"
                 ifOverflow="hidden"
-                label={{ value: r.label, position: 'insideBottomRight', fontSize: 10, fill: 'var(--muted-foreground)' }}
+                label={{ value: r.label, position: 'insideBottomRight', fontSize: 13, fill: 'var(--muted-foreground)', dy: -2 }}
               />
             ))}
 
@@ -107,22 +110,20 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
               y1={baseline - BAND}
               y2={baseline + BAND}
               fill="var(--primary)"
-              fillOpacity={0.13}
-              stroke="var(--primary)"
-              strokeOpacity={0.25}
-              strokeDasharray="3 3"
+              fillOpacity={0.09}
+              stroke="none"
               ifOverflow="hidden"
-              label={{ value: 'pas izhodišča', position: 'insideTopLeft', fontSize: 10, fill: 'var(--foreground)' }}
+              label={{ value: 'pas izhodišča', position: 'insideTopLeft', fontSize: 13, fill: 'var(--primary)', dx: 4 }}
             />
           )}
           {isAll && (
             <>
-              <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.6} />
+              <ReferenceLine y={0} stroke="var(--input)" />
               <ReferenceLine
                 y={ALERT_THRESHOLD}
-                stroke="#b45309"
+                stroke="var(--status-amber)"
                 strokeDasharray="6 4"
-                label={{ value: 'prag opozorila (−10)', position: 'insideBottomRight', fontSize: 10, fill: '#b45309' }}
+                label={{ value: 'prag opozorila: 10 točk pod izhodiščem', position: 'insideBottomLeft', fontSize: 13, fill: 'var(--status-amber)', dx: 4, dy: 18 }}
               />
             </>
           )}
@@ -135,26 +136,27 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
                 x={m.t}
                 stroke={st.stroke}
                 strokeDasharray={st.dash}
-                strokeWidth={m.kind === 'alert' ? 1.5 : 1}
-                label={{ value: m.label, position: 'top', fontSize: 10, fill: st.stroke }}
+                strokeWidth={1.25}
+                strokeOpacity={m.kind === 'alert' ? 0.75 : 1}
+                label={{ value: m.label, position: 'top', fontSize: 13, fill: st.stroke }}
               />
             )
           })}
 
           <Tooltip
-            cursor={{ stroke: 'var(--muted-foreground)', strokeOpacity: 0.3 }}
+            cursor={{ stroke: 'var(--input)', strokeOpacity: 0.6 }}
             content={({ active, payload }) => {
               const r = payload?.[0]?.payload as ChartRow | undefined
               if (!active || !r) return null
               const s = r.sessionId != null ? byId.get(r.sessionId) : undefined
               return (
-                <div className="rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow">
-                  <div className="font-medium">{formatDay(r.t)}</div>
+                <div className="rounded-lg border bg-popover px-3 py-2 text-[0.875rem] shadow-panel">
+                  <div className="font-semibold">{formatDay(r.t)}</div>
                   {isAll && r.delta != null && <div>Skupni trend: {deltaWords(r.delta)}</div>}
                   {!isAll && r.ewma != null && <div>Glajen rezultat: {regionWord(r.ewma)}</div>}
                   {s && (
                     <div>
-                      Seja: {regionWord(s.score)} ({Math.round(s.score ?? 0)}/100)
+                      Seja: {regionWord(s.score)} ({Math.round(s.score ?? 0)} od 100)
                     </div>
                   )}
                 </div>
@@ -167,9 +169,10 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
               type="monotone"
               dataKey="delta"
               name="Skupni trend"
-              stroke="var(--foreground)"
+              stroke="var(--chart-1)"
               strokeWidth={2.5}
-              dot={{ r: 3, fill: 'var(--foreground)' }}
+              dot={{ r: 2.5, fill: 'var(--chart-1)', strokeWidth: 0 }}
+              activeDot={{ r: 5, fill: 'var(--chart-1)', stroke: 'var(--card)', strokeWidth: 2 }}
               connectNulls
               isAnimationActive={false}
             />
@@ -187,10 +190,10 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
                     <circle
                       cx={p.cx}
                       cy={p.cy}
-                      r={sel ? 6 : 4.5}
-                      fill="var(--foreground)"
-                      fillOpacity={sel ? 0.9 : 0.28}
-                      stroke={sel ? 'var(--foreground)' : 'none'}
+                      r={sel ? 6.5 : 4.5}
+                      fill="var(--chart-1)"
+                      fillOpacity={sel ? 1 : 0.25}
+                      stroke={sel ? 'var(--card)' : 'none'}
                       strokeWidth={2}
                       style={{ cursor: 'pointer' }}
                       onClick={() => s && onSelectSession(s)}
@@ -201,8 +204,8 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
               <Line
                 type="monotone"
                 dataKey="ewma"
-                name="Glajen rezultat (EWMA)"
-                stroke="var(--foreground)"
+                name="Glajen rezultat"
+                stroke="var(--chart-1)"
                 strokeWidth={2.5}
                 dot={false}
                 connectNulls
@@ -213,8 +216,8 @@ export function GameChart({ timeline, view, domain, selectedId, onSelectSession,
         </ComposedChart>
       )}
       {!hasData && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-          {isAll ? 'Še ni skupnega trenda.' : `Za stopnjo »${LEVEL_NAMES[view]}« še ni sej.`}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center pl-16 text-[0.9375rem] text-muted-foreground">
+          <span className="rounded-lg bg-card px-3 py-1.5">{isAll ? 'Skupnega trenda še ni: najprej se mora oblikovati izhodišče.' : `Za stopnjo »${LEVEL_NAMES[view]}« še ni sej.`}</span>
         </div>
       )}
     </div>
