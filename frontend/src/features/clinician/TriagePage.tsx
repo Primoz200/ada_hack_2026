@@ -17,7 +17,7 @@ import { EmptyState, ErrorState, StatusBadge, UnderlineTabs } from './ui'
 // status | name | trendlines (one column each; a third, for the computer-vision games, fits later) | arrow
 // on a phone: status, name and trendlines stack in one column, the arrow stays top right
 const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-x-8 gap-y-2 md:grid-cols-[10.5rem_minmax(0,1fr)_auto_2rem]'
-const TREND_W = 176
+const TREND_W = 220
 
 const TABS: { id: TriageTab; label: string }[] = [
   { id: 'attention', label: 'Zahteva pozornost' },
