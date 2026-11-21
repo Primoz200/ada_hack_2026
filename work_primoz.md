@@ -16,3 +16,18 @@
 **Opravljeno:** deep research končan. `RESEARCH.md` (≈10k besed, slovensko, ~190 virov z linki/DOI; kopija v `reports/`, zapiski v `research_notes/`). Povzetek dodan v `PLAN.md`.
 **Ključno naučeno:** ni javnih podatkov za kap/CTR/CIPN pri takih igrah → sintetika + trend glede na lastno izhodišče; validiranega testa na miško ni (MVP je prilagoditev); iOS senzorji rabijo requestPermission + HTTPS.
 **Naslednji korak:** generator sintetičnih podatkov za igro 1 (tracing) + baseline model.
+
+## 2026-11-21 — Odločitev o igrah za MVP
+
+**Obseg MVP:** samo 2 igri – (1) tracer igra (en NN model za vse stopnje/oblike, ker so si podobne), (2) igra z računalniškim vidom (MediaPipe). Tretje igre (telefon/senzorji) zaenkrat ni.
+
+**CV igra – 3 vaje:**
+1. **Odpiranje/zapiranje dlani** (pest → razprti prsti) – MediaPipe Hands. Metrika: povprečna razdalja konic prstov do zapestja / velikost dlani → razpon, hitrost, št. ponovitev, gladkost, razlika levo/desno. Izvaja se v ritmu (~1 Hz) + »odpri čim bolj«, NE na maksimalno hitrost (webcam ~15–30 fps, motion blur).
+2. **Abdukcija ramen (roke v stran)** – MediaPipe Pose, frontalna kamera. Metrika: kot kolk–rama–komolec (% lastnega izhodišča), nagib trupa (kompenzacija), simetrija L/D, gladkost. Najbolje validiran kot (ICC 0,86–0,96).
+3. **Dvig rok čim višje** – MediaPipe Pose. Pozor: dvig naprej (fleksija) je za eno kamero problematičen (globina). Zato meriti **višino zapestja nad ramo, normalizirano z dolžino trupa** (2D, neodvisno od globine), ne kota ramena; + nagib trupa / dvig na prste kot kompenzacija, simetrija.
+
+**Modeli za CV:** vaje imajo različne landmarke (Hands vs Pose) → verjetno 2 modela (dlan, roke) ali en model s tipom vaje kot vhodom. Vhod: normalizirane relativne vrednosti in koti (% izhodišča).
+
+**Tehnične opombe:** v vsaki seji meriti dejanski fps (timestampi), pod ~20 fps opozorilo/nizka kakovost; uporabljati timestampe in prevzorčiti na 30 Hz; v sintetičnem generatorju simulirati 15–30 fps z jitterjem, izpadi sličic in šumom landmarkov.
+
+**Naslednji korak:** generator sintetičnih podatkov za tracer igro + baseline model.
