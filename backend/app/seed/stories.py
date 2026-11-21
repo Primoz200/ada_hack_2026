@@ -159,8 +159,8 @@ P3_DECLINE = 0.85  # ... then a slow decline, points per day (hard to see day to
 
 def _p3_curve(k: int) -> float:
     if k <= P3_PEAK_DAY:
-        return 69.0 + P3_RISE * k
-    return 69.0 + P3_RISE * P3_PEAK_DAY - P3_DECLINE * (k - P3_PEAK_DAY)
+        return 80.0 + P3_RISE * k
+    return 80.0 + P3_RISE * P3_PEAK_DAY - P3_DECLINE * (k - P3_PEAK_DAY)
 
 
 def _p4_curve(k: int) -> float:

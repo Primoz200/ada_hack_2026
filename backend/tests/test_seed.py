@@ -98,7 +98,7 @@ def test_p3_main_demo_patient_at_reset(client):
     assert all(s["day"] < TODAY.isoformat() for s in tl["sessions"])
     last = {t["metric"]: t for t in tl["trends"] if t["day"] == yesterday}
     for lv in (1, 2, 3):
-        assert 55 <= last[f"trace:{lv}"]["ewma"] <= 65
+        assert 66 <= last[f"trace:{lv}"]["ewma"] <= 76  # a sloppy live trace (~45-65) tips it; a careful one (~95) does not
     ratings = [c["answers"] for c in tl["checkins"]]
     assert all(6 <= r["wellbeing"] <= 8 and 1 <= r["pain"] <= 4 for r in ratings)
     # three weeks of recovery first: the peak is clearly above the baseline

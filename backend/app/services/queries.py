@@ -34,7 +34,7 @@ def open_alert(db: Session, patient_id: str) -> Optional[Alert]:
 BASELINE_NEEDED = 4  # practice session + baseline sessions (see trend.py)
 IMPROVING_REASON = "Rezultati so nad izhodiščem."
 STABLE_REASON = "Brez posebnosti; rezultati so blizu izhodišča."
-DECLINING_HANDLED_REASON = "Rezultati so pod izhodiščem; opozorila trenutno ni odprtega."
+DECLINING_HANDLED_REASON = "Rezultati so nekoliko pod izhodiščem."
 URGENCY = {"red": 0, "yellow": 1, "no_data": 2, "insufficient_data": 3, "stable": 4}
 
 
