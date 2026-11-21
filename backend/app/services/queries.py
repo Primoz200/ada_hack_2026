@@ -1,4 +1,5 @@
 """Read-side helpers: table rows -> response models, patient state for the triage list."""
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -88,10 +89,11 @@ def patient_state(db: Session, p: Patient, today: date) -> PatientState:
         if silent >= alert_rules.GREY_AFTER_MISSED_DAYS:
             status, reason = "no_data", f"Brez vnosa že {silent} dni."
         elif latest is None:
-            scored = db.exec(select(GameSession.id).where(
+            scored = db.exec(select(GameSession.game_type, GameSession.level).where(
                 GameSession.patient_id == p.id, GameSession.completed == True,  # noqa: E712
                 GameSession.counts_for_trend == True)).all()  # noqa: E712
-            n = min(len(scored), BASELINE_NEEDED - 1)
+            per_level = Counter(tuple(r) for r in scored)  # the baseline is per level
+            n = min(max(per_level.values(), default=0), BASELINE_NEEDED - 1)
             status = "insufficient_data"
             reason = f"Premalo sej za izhodišče ({n} od {BASELINE_NEEDED})."
         elif direction == "improving":

@@ -217,46 +217,49 @@ _LATEST_KEYS = ("delta", "previousDeltas", "wellbeingChange", "painChange", "mis
 
 
 def _merge(db: Session, patient_id: str, day: date, triggers: list[dict]) -> Optional[Alert]:
-    triggers = [t for t in triggers if not _suppressed(db, patient_id, t, day)]
+    live = [t for t in triggers if not _suppressed(db, patient_id, t, day)]
     alert = open_alert(db, patient_id)
+    triggers = live
     if alert is not None:
         seen = {(x.get("rule"), x.get("day")) for x in alert.evidence.get("triggers", [])}
-        triggers = [t for t in triggers if (t["rule"], t["day"].isoformat()) not in seen]
+        triggers = [t for t in live if (t["rule"], t["day"].isoformat()) not in seen]
+    # numbers and ids come from every live trigger, so the evidence follows the latest data of
+    # the day (e.g. all three sessions of a self-check), while trigger entries are appended once
+    extras: dict[str, Any] = {}
+    for t in live:
+        for k, v in t["extra"].items():
+            if k in ("sessionIds", "checkinIds"):
+                extras[k] = sorted(set(extras.get(k, [])) | set(v))
+            elif k in _LATEST_KEYS and (v is not None or k not in extras):
+                extras[k] = v
+    entries = [{"rule": t["rule"], "severity": t["severity"], "source": t["source"],
+                "day": t["day"].isoformat(), "reason": t["reason"]} for t in triggers]
     if triggers:
         top = max(triggers, key=_priority)  # first of the most severe
-        entries = [{"rule": t["rule"], "severity": t["severity"], "source": t["source"],
-                    "day": t["day"].isoformat(), "reason": t["reason"]} for t in triggers]
-        extras: dict[str, Any] = {}
-        for t in triggers:
-            for k, v in t["extra"].items():
-                if k in ("sessionIds", "checkinIds"):
-                    extras[k] = sorted(set(extras.get(k, [])) | set(v))
-                elif k in _LATEST_KEYS and (v is not None or k not in extras):
-                    extras[k] = v
         now = _stamp(day)
         if alert is None:
             alert = Alert(patient_id=patient_id, source=top["source"], rule=top["rule"],
                           severity=top["severity"], status="new", reason=top["reason"],
-                          created_at=now, updated_at=now, opened_day=day, evidence={})
-            ev: dict[str, Any] = {"triggers": []}
-        else:
-            ev = dict(alert.evidence)
-            if _priority(top) > (SEVERITY_RANK[alert.severity], RULE_PRIORITY.get(alert.rule, 0)):
-                worse = SEVERITY_RANK[top["severity"]] > SEVERITY_RANK[alert.severity]
-                alert.source, alert.rule = top["source"], top["rule"]
-                alert.severity, alert.reason = top["severity"], top["reason"]
-                if worse and alert.status == "acknowledged":  # worse than what the clinician saw
-                    alert.status = "new"
-                    alert.acknowledged_by = alert.acknowledged_at = None
-            alert.updated_at = now
+                          created_at=now, updated_at=now, opened_day=day, evidence={"triggers": []})
+        elif _priority(top) > (SEVERITY_RANK[alert.severity], RULE_PRIORITY.get(alert.rule, 0)):
+            worse = SEVERITY_RANK[top["severity"]] > SEVERITY_RANK[alert.severity]
+            alert.source, alert.rule = top["source"], top["rule"]
+            alert.severity, alert.reason = top["severity"], top["reason"]
+            if worse and alert.status == "acknowledged":  # worse than what the clinician saw
+                alert.status = "new"
+                alert.acknowledged_by = alert.acknowledged_at = None
+        alert.updated_at = now
+    if alert is not None and (entries or extras):
+        ev = dict(alert.evidence)
         ev["triggers"] = list(ev.get("triggers", [])) + entries
         for k, v in extras.items():
             if k in ("sessionIds", "checkinIds"):
                 v = sorted(set(ev.get(k, [])) | set(v))
             ev[k] = v
-        alert.evidence = ev
-        db.add(alert)
-        db.flush()
+        if ev != alert.evidence:
+            alert.evidence = ev
+            db.add(alert)
+            db.flush()
     if alert is not None:
         diverging, sentence = divergence.assess(db, patient_id, day)
         if alert.diverging != diverging or alert.evidence.get("divergence") != sentence:

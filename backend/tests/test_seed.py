@@ -114,6 +114,7 @@ def test_p4_red_both_open_before_today(client):
     assert (a["severity"], a["rule"]) == ("red", "both")
     assert a["openedDay"] < TODAY.isoformat()
     assert a["evidence"]["delta"] <= -10 and a["evidence"]["painChange"] >= 2
+    assert a["evidence"]["delta"] == round(_combined(client, "p4")[-1]["delta"], 1)
     assert detail["nextVisitDate"] is None
 
 
@@ -139,7 +140,8 @@ def test_p8_noisy_but_never_alerts(client):
 
 
 def test_p9_insufficient(client):
-    assert _by_id(client)["p9"]["status"] == "insufficient_data"
+    p9 = _by_id(client)["p9"]
+    assert p9["status"] == "insufficient_data" and "2 od 4" in p9["reason"]  # two days, per level
     assert client.get("/api/patients/p9/selfcheck/summary").json()["tone"] == "first"
 
 

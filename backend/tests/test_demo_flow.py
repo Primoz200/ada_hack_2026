@@ -83,6 +83,9 @@ def test_sloppy_selfcheck_opens_yellow_and_patient_hears_it_calmly(client):
 
     p = _p3(client)
     assert p["status"] == "yellow" and p["openAlertId"] and p["daysToNextVisit"] >= 28
+    ev = client.get("/api/patients/p3").json()["openAlert"]["evidence"]
+    assert ev["delta"] == round(_combined_today(), 1)  # follows all three sessions, not the first
+    assert {r.id for r in rows} <= set(ev["sessionIds"])
     assert client.get("/api/patients").json()["counters"]["needsAttention"] == 3
     summary = client.get("/api/patients/p3/selfcheck/summary").json()
     assert summary["trend"] == "declining" and summary["tone"] == "lower"
