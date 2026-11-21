@@ -6,7 +6,16 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.spatial import cKDTree
 
-LEVELS_FILE = Path(__file__).resolve().parents[2] / "shared" / "tracer_levels.json"
+def _find_levels_file() -> Path:
+    """shared/tracer_levels.json in the repo root (searched upwards, so the code can move around)."""
+    for parent in Path(__file__).resolve().parents:
+        f = parent / "shared" / "tracer_levels.json"
+        if f.exists():
+            return f
+    raise FileNotFoundError("shared/tracer_levels.json not found")
+
+
+LEVELS_FILE = _find_levels_file()
 
 
 class Level:
@@ -14,6 +23,8 @@ class Level:
 
     def __init__(self, spec: dict, step: float = 2.0):
         self.id = spec["level_id"]
+        self.number = int(spec["level"])  # GameResult.level (1 = line, 2 = circle, 3 = maze)
+        self.path = np.asarray(spec["path"], dtype=float)  # original polyline (0-1000 units)
         self.version = spec["version"]
         self.channel_width = float(spec["channel_width"])
         self.time_limit_s = float(spec["time_limit_s"])
@@ -58,6 +69,15 @@ class Level:
         return d, self.s[idx]
 
 
+CANVAS_UNITS = 1000.0  # internal geometry is in 0-1000 units; GameResult coordinates are 0-1
+
+
 def load_levels(path: Path = LEVELS_FILE) -> dict:
+    """Levels keyed by level_id ("line", "circle", "maze")."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     return {spec["level_id"]: Level(spec) for spec in data["levels"]}
+
+
+def levels_by_number(path: Path = LEVELS_FILE) -> dict:
+    """Levels keyed by GameResult.level (1, 2, 3)."""
+    return {lv.number: lv for lv in load_levels(path).values()}
