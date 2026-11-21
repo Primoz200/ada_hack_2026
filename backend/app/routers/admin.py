@@ -1,8 +1,9 @@
-"""Demo controls. Phase 0: reset works; the Phase 2 agent implements simulate."""
+"""Demo controls: reset the database and simulate the next N days."""
 from fastapi import APIRouter, HTTPException
 from sqlmodel import select
 
 from app import seed
+from app.seed import simulate
 from app.deps import Db
 from app.models import Clinician
 from app.models.schemas import ClinicianOut, MetaOut, ResetOut, SimulateIn, SimulateOut
@@ -26,4 +27,7 @@ def reset_demo():
 
 @router.post("/admin/simulate", response_model=SimulateOut, operation_id="simulateDays")
 def simulate_days(data: SimulateIn, db: Db):
-    raise HTTPException(501, "Ni še implementirano")
+    try:
+        return simulate.simulate(db, data.patient_id, data.days)
+    except KeyError:
+        raise HTTPException(404, "Pacient ne obstaja")

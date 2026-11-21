@@ -1,6 +1,7 @@
 """FastAPI app: API under /api/*, built frontend served from the same origin.
 Shared hot file (router registration): only the orchestrator / Matevž edits it.
 """
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,7 +17,12 @@ FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    seed.seed_if_empty()
+    # the database is disposable and the clock offset lives in memory: reseed on every start
+    # unless APP_KEEP_DB=1 (keep an existing file database)
+    if os.environ.get("APP_KEEP_DB") == "1":
+        seed.seed_if_empty()
+    else:
+        seed.reset_database()
     yield
 
 
