@@ -104,7 +104,7 @@ import:
 # meta-and-pathways
 `GET /api/pathways` returns the two :Pathway: rows with their games and questions.
 
-`GET /api/meta` returns :Today:, `syntheticData` true, the list of :Clinician: rows, `outcomes` (each :Outcome: id to its Slovenian label), the version of the :Scorer: active now (the external model's version once it has loaded and its last call succeeded, otherwise :StandinVersion:) and `defaultPatientId` `p3`.
+`GET /api/meta` returns :Today:, `syntheticData` true, the list of :Clinician: rows, `outcomes` (each :Outcome: id to its Slovenian label), `modelVersion`, the version of the :Scorer: active now: reading it tries to load the external model if that was not tried yet, and it is the external model's `MODEL_VERSION` when it loaded and its last call did not fail, otherwise :StandinVersion: and `defaultPatientId` `p3`.
 
 # demo-patients
 The demo has the two :Pathway: rows, the :Clinician: and the ten :DemoStory: patients (id, name, birth year, pathway, side, sort order, demo flag), each discharged the story's number of days before :Today:, with its next visit the story's number of days after :Today: (none when the story has none).
@@ -147,7 +147,7 @@ The divergence of a patient as of a day compares the latest `trace:all` delta up
 As of a day, these :Trigger: rules are evaluated for a patient (reasons word for word).
 - `trend_drop`, yellow, source game: the latest `trace:all` snapshot with a delta has delta <= -10, and at least 2 of the up to 3 snapshots with a delta before it have delta <= -5. Reason "Rezultati sledenja so že več dni pod pacientovim izhodiščem."; extra `delta` (1 decimal), `sessionIds` (the counting trace sessions of those snapshot days) and `previousDeltas` (1 decimal).
 - `big_drop`, red, source game: that latest delta <= -20. Reason "Rezultati sledenja so močno padli pod pacientovo izhodišče."; extra `delta` and `sessionIds`.
-- `subjective_drop`, yellow, source checkin: over the check-ins of the last 14 days, per rating, the mean of the last 7 days minus the mean of the 7 before, with at least 2 check-ins in each week; it fires when wellbeing fell by at least 2 or pain rose by at least 2. Its day is the last recent check-in's day; reason "Pacient poroča slabše počutje kot prejšnji teden.", "Pacient poroča močnejšo bolečino kot prejšnji teden." or, both, "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden."; extra `wellbeingChange` and `painChange` (2 decimals or null) and `checkinIds` of the recent week.
+- `subjective_drop`, yellow, source checkin: per rating, the mean of the check-ins of the recent week (day - 6 to day) minus the mean of the week before (day - 13 to day - 7), with at least 2 check-ins in each week; it fires when wellbeing fell by at least 2 or pain rose by at least 2. Its day is the last recent check-in's day; reason "Pacient poroča slabše počutje kot prejšnji teden.", "Pacient poroča močnejšo bolečino kot prejšnji teden." or, both, "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden."; extra `wellbeingChange` and `painChange` (2 decimals or null) and `checkinIds` of the recent week.
 - `both`, red, source game: `trend_drop` and `subjective_drop` hold together; its day is the later of the two; reason "Padajo rezultati sledenja in počutje hkrati."; extra `delta`, `wellbeingChange`, `painChange`.
 
 # alert-merging
@@ -156,8 +156,9 @@ Evaluating the alerts of a patient as of a day, after every ingested :Checkin: o
 - Without an open alert, the live triggers open a new one with status `new`, opened on the day, taking source, rule, severity and reason from the most severe trigger; at equal severity `both` beats `big_drop`, which beats the rest.
 - With an open alert, triggers whose (rule, day) it already lists are not appended again; a more severe or higher-priority trigger replaces its source, rule, severity and reason, and when it is more severe and the alert was `acknowledged`, the alert returns to `new` with the acknowledgement cleared.
 - Every appended trigger is listed in `evidence.triggers` as `{rule, severity, source, day, reason}`; `sessionIds` and `checkinIds` in the evidence are the sorted union of all live triggers'; `delta`, `previousDeltas`, `wellbeingChange`, `painChange` and `missedDays` take the latest value.
-- The alert's `diverging` flag and `evidence.divergence` follow the patient's divergence as of the day.
-- Created and updated times are "now" when the day is :Today:, otherwise noon UTC of that day.
+- The triggers of one evaluation are considered in the order `both`, `big_drop`, `trend_drop`, `subjective_drop`, and appended in that order.
+- The alert's `diverging` flag follows the patient's divergence as of the day, and `evidence.divergence` holds its sentence, or null when it does not diverge.
+- The created time, and the updated time whenever triggers are appended, are "now" when the day is :Today:, otherwise noon UTC of that day; an evaluation that appends nothing leaves the updated time as it is.
 
 # missing-data-alerts
 A grey `no_data` alert (source missing, reason "Pacient že več dni nima nobenega vnosa ali meritve.", extra `missedDays`) opens for a patient without an open alert when the discharge was at least 4 days ago and at least 4 days have passed since the latest of their last check-in day, last session day and discharge date.
@@ -185,8 +186,8 @@ A grey `no_data` alert (source missing, reason "Pacient že več dni nima nobene
 `GET /api/patients/{patientId}/timeline` returns :Today:, the discharge and next visit dates, all sessions (without raw data) by start time, all check-ins by day, all trend snapshots by day and all alerts by id, closed ones included.
 
 # patient-home
-`GET /api/patients/{patientId}/home` returns the patient's name, pathway code and name, hand (the affected side), :Today:, the self-check steps, whether all of them are done today, and the last day up to :Today: with any entry.
-- The steps are, in order, `ratings` (kind ratings, title "Počutje in bolečina", done when there is a check-in today) and one step per game level of the pathway with id `<gameType>:<level>`, kind game, title "Ravna črta", "Krog", "Labirint" for trace levels 1-3 (else "Stopnja N"), done when a completed session of that level exists today.
+`GET /api/patients/{patientId}/home` returns exactly the fields `patientId`, `name`, `pathwayCode`, `pathwayName`, `hand` (the affected side), `today` (:Today:), `steps`, `selfcheckDoneToday` (every step done) and `lastSelfcheckDay` (the last day up to :Today: with a check-in or a session, or null).
+- Each step has exactly `id`, `kind`, `title`, `gameType`, `level` and `done`. The steps are, in order, `ratings` (kind `ratings`, title "Počutje in bolečina", `gameType` and `level` null, done when there is a check-in today) and one step per game level of the pathway with id `<gameType>:<level>`, kind `game`, its `gameType` and `level`, title "Ravna črta", "Krog", "Labirint" for trace levels 1-3 (else "Stopnja N"), done when a completed session of that level exists today.
 
 # patient-feedback
 Patient feedback as of a day uses the `trace:all` snapshots with a delta up to that day, oldest first; it never shows a number.
@@ -195,11 +196,13 @@ Patient feedback as of a day uses the `trace:all` snapshots with a delta up to t
 - Trend: `declining` when the patient has an open yellow or red alert with a game rule (`trend_drop`, `big_drop`, `both`) as its rule or in its triggers; else, comparing the latest delta with the one 5 session-days earlier (or the first), `declining` when latest <= -5 and at least 3 lower, `improving` when latest >= 5 and at least 3 higher, else `stable`.
 - Title and text come from [the feedback messages](resources/feedback_messages.md) by (tone, trend); `first` or `unknown` always gives the first-day message.
 
-`GET /api/patients/{patientId}/selfcheck/summary` returns that feedback for :Today:, the day, the number of game steps done today and in total, and the points of the last 14 days. `GET /api/patients/{patientId}/progress` returns the feedback, all points, all ratings (day, wellbeing, pain) up to :Today:, the day of the best delta (ties: the later day), the number of days with any entry in the last 7, the week goal 5, and the latest acknowledgement time of any of the patient's alerts.
-- A point is a day, its delta rounded to 1 decimal and a label: `lower` at <= -5, `better` at >= 5, else `usual`.
+`GET /api/patients/{patientId}/selfcheck/summary` returns exactly `tone`, `trend`, `title`, `text` (the feedback for :Today:, flat, not nested), `patientId`, `day` (:Today:), `levelsDone` (game steps done today), `levelsTotal` (game steps in total) and `points` (the points of the last 14 days, :Today: included).
+
+`GET /api/patients/{patientId}/progress` returns exactly `tone`, `trend`, `title`, `text` (flat), `patientId`, `points` (all), `ratings` (each check-in up to :Today: as `day`, `wellbeing`, `pain`), `personalBestDay` (the day of the highest delta, ties to the later day, or null), `weekDone` (days with any entry in the last 7 days), `weekGoal` (5) and `clinicianReviewedAt` (the latest acknowledgement time of any of the patient's alerts, or null).
+- A point has exactly `day`, `value` (its delta rounded to 1 decimal) and `label`: `lower` at <= -5, `better` at >= 5, else `usual`.
 
 # demo-history
 Seeding the demo also replays each :DemoStory:'s history, day by day, from the day after the earliest discharge up to yesterday.
 - With :Today: fixed to the replayed day, each story's plan of day k (days since discharge, k >= 1) is written through the ingest service: first the check-in at hour h-1, minute 30, then one completed trace session per level at hour h, minute 5 x level, where h = 8 + (sum of the character codes of the patient id) mod 9. Then the missing-data sweep runs, then the story's clinician actions of day k are applied to the patient's open alert as clinician `c1`. Today itself only gets the sweep.
-- A session's score is preset from the story (version :StandinVersion:, class by :ImpairmentClass:); its features and synthetic trace come from [the trace generator](resources/seed_traces.py), with the stored features `dev_mean` (mean_dev / 0.06, 3 decimals), `duration_s`, `n_pauses` (round(pause_rate_hz x duration_s / 4)) and `n_lifts`.
+- A session's score is preset from the story (version :StandinVersion:, class by :ImpairmentClass:); its features are `level_features(level, score, rng_for(id, k, "feat<level>"))` and its trace `synthetic_trace(level, mean_dev * 1.4, duration_ms=int(duration_s * 1000), lifts=int(lifts), seed="<id>:<k>:<level>")` from [the trace generator](resources/seed_traces.py), with the stored features `dev_mean` (mean_dev / 0.06, 3 decimals), `duration_s`, `n_pauses` (round(pause_rate_hz x duration_s / 4)) and `n_lifts`.
 - The client meta is `touch` 360x360 at pixel ratio 3 or `mouse` 480x480 at pixel ratio 2, with user agent "seed (touch)" or "seed (mouse)", by the story's input device.
