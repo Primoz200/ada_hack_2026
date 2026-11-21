@@ -37,3 +37,22 @@
 - Napisan `docs/tracer_data_spec.md` (format poskusa: patient_id, level_id, started_at, completed, samples t/x/y/down v logičnih enotah 0–1000, ~60 Hz rAF) in `shared/tracer_levels.json` (line, circle, maze; kanal 60 enot).
 - Odločitve: fiksne oblike, ena roka, en poskus na stopnjo, držanje gumba, natančnost glavni signal, POST po vsakem poskusu.
 - Naslednji korak: generator sintetičnih podatkov v istem formatu + `label`.
+
+## 2026-11-21 — Tracer generator v2 + uskladitev z IMPLEMENTATION_PLAN
+
+- `IMPLEMENTATION_PLAN.md` (na main): stopnje 1=line, 2=circle, 3=maze iz `shared/tracer_levels.json`; kvadratno platno (0–1 normalizacija); trend ločeno po igri+stopnji+vnosu; miška dovoljena za MVP/demo (`inputDevice: touch|mouse|camera`).
+- Generator v2: odstopanje samo pravokotno na pot (tremor + OU "stock chart" jitter, brez zank); primer grafa `models/data/tracer_samples.jpg`. corr(score, rmsdev) = −0.93.
+- Opombe za model: hitrost meriti kot napredek vzdolž poti (surova hitrost kurzorja pri hudi okvari zaradi jitterja naraste).
+- **Odprto:** `docs/tracer_data_spec.md` in generator še nista prestavljena na format `GameResult` iz plana (series: targetX/targetY/t/x/y/strokeId, 0–1, `level` 1–3, surovi dogodki z vrzelmi namesto fiksnih 60 Hz).
+- **Naslednji korak:** nevronska mreža za tracer (baseline na značilkah + 1D-CNN, izhod score 0–100 + razred, stopnja kot vhod).
+
+## 2026-11-21 — Tracer: GameResult format + prva modela
+
+- `models/` prestavljen v **`backend/models/`**. Venv zdaj v `~/venvs/ada_models` (na /mnt/c je namestitev torcha prepočasna); RTX 5050 + torch 2.11 cu128 dela.
+- Generator izpisuje **`GameResult`** (level 1–3, series targetX/targetY/t/x/y/strokeId v 0–1, točke samo med držanjem gumba, postanek = vrzel v `t`, snap na piksle). Dodan osebni slog (hitro & nenatančno ↔ počasi & natančno) in šum oznake ±5 točk (`score` = učna, `score_clean` = resnica). `shared/tracer_levels.json` ima polje `level`. Spec `docs/tracer_data_spec.md` → v2.
+- Nove datoteke: `common.py` (pragi 85/65/40, metrike), `features.py` (prevzorčenje 50 Hz + 20 značilk + zaporedje za CNN; uporabi ga tudi `score_session`), `dataset.py` (cache), `train_baseline.py`, `train_cnn.py`. 9000 poskusov (3000/stopnjo), split 70/15/15.
+- Rezultati (test, MAE proti resnici): **GBM 6,45**, razred 78 %; **CNN 6,85**, razred 78 %; nobeden ne zgreši za več kot 1 razred. CNN se preprilega (train loss 1,2). Pričakovano: na sintetiki so ročne značilke skoraj vse, kar generator vsebuje.
+- Naslednje: odločitev, kaj gre v backend (GBM / CNN / povprečje), `score_session`, snemalnik za realne poskuse.
+- Primerjava velikosti CNN (graf `backend/models/data/tracer_training.jpg`, skripta `plot_training.py`): Dropout1d v konvolucijah odpravi preprileganje; manjše mreže (širina 32/16/8, dropout 0,3) se podprilegajo. Privzeto zdaj širina 64, dropout 0,1 → test MAE 6,76 (GBM 6,45). Nadaljnje izboljšave (daljši trening, povprečje GBM+CNN) počakajo na realne podatke.
+- `score_session` (povezava backend ↔ model) bo verjetno naredil Matevž; vse potrebno je v `features.py` (preprocess, extract_features), `common.py` (score_to_class) in `artifacts/` (tracer_gbm.joblib, tracer_cnn.pt). Venv: `~/venvs/ada_models`.
+- **Naslednji korak:** model za CV igro (MediaPipe: odpiranje dlani, abdukcija ramen, dvig rok).

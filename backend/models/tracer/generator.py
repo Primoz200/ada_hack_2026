@@ -1,6 +1,8 @@
 """Rule-based synthetic data generator for the tracer game.
 
-Produces attempts in exactly the format of docs/tracer_data_spec.md, plus a `label` field.
+Produces attempts in the `GameResult` format of IMPLEMENTATION_PLAN.md / docs/tracer_data_spec.md
+(gameType "trace", level 1-3, series targetX/targetY/t/x/y/strokeId in 0-1 canvas coordinates),
+plus a synthetic `id` and a `label` field that the frontend never sends.
 
 Model of an attempt
 -------------------
@@ -17,8 +19,14 @@ its own random weight, so impairment shows up differently in different "patients
 Motion is built in the arc-length domain: a speed profile v(s) along the path gives time t(s);
 pauses/lifts are inserted as time jumps at fixed s. The cursor is then the path point at s(t)
 plus lateral deviation and tremor, sampled at ~60 Hz with frame jitter and dropped frames.
+Like the browser, points are only recorded while the button is held (lift -> new strokeId) and
+a motionless pause produces no events (a gap in t). Coordinates are snapped to the canvas pixel grid.
 
-Label: score = round(100 * (1 - sev)); class from the score thresholds below
+Personal style: a speed-accuracy trade-off per person (fast & sloppy vs. slow & precise), independent
+of severity, so speed and accuracy alone do not give away the score.
+
+Label: score_clean = 100 * (1 - sev); training target `score` = score_clean + N(0, LABEL_NOISE_SD)
+(clinical ratings are noisy too); class from the score thresholds below
 (thresholds are a design assumption, see RESEARCH.md).
 """
 import argparse
@@ -28,25 +36,18 @@ from pathlib import Path
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
+from scipy.signal import lfilter
 
-from levels import Level, load_levels
+from common import CLASSES, score_to_class
+from levels import CANVAS_UNITS, Level, load_levels
 
-CLASSES = ["normal", "mild", "moderate", "severe"]
-# severity ranges per class -> score = 100 * (1 - sev): normal >= 85, mild 65-84, moderate 40-64, severe < 40
+# severity ranges per class -> score = 100 * (1 - sev), see common.THRESHOLDS
 SEV_RANGES = {"normal": (0.0, 0.15), "mild": (0.15, 0.35), "moderate": (0.35, 0.60), "severe": (0.60, 1.0)}
 
 FRAME_MS = 1000.0 / 60.0
+LABEL_NOISE_SD = 5.0  # score points
+CANVAS_PX = (500, 900)  # range of square canvas sizes in CSS px
 GRID_HZ = 200.0  # internal time grid for noise processes
-
-
-def score_to_class(score: float) -> str:
-    if score >= 85:
-        return "normal"
-    if score >= 65:
-        return "mild"
-    if score >= 40:
-        return "moderate"
-    return "severe"
 
 
 def smooth_noise(rng, n, sigma_samples):
@@ -57,27 +58,43 @@ def smooth_noise(rng, n, sigma_samples):
     return (x - x.mean()) / (x.std() + 1e-9)
 
 
+def ou_noise(rng, n, corr_samples):
+    """Zero-mean, unit-std Ornstein-Uhlenbeck noise (mean-reverting random walk): jagged like a stock chart."""
+    a = np.exp(-1.0 / max(corr_samples, 1.0))
+    e = rng.standard_normal(n) * np.sqrt(1.0 - a * a)
+    e[0] = rng.standard_normal()
+    x = lfilter([1.0], [1.0, -a], e)  # x[i] = a * x[i-1] + e[i]
+    x = gaussian_filter1d(x, 0.02 * GRID_HZ)  # hand inertia: no instant jumps (~20 ms)
+    return (x - x.mean()) / (x.std() + 1e-9)
+
+
 def sample_params(sev: float, rng: np.random.Generator) -> dict:
     """Map latent severity to concrete generator parameters (with per-person variation)."""
     def comp():  # each mechanism scales with sev, with individual variation
-        return float(np.clip(sev * rng.uniform(0.6, 1.4), 0.0, 1.0))
+        return float(np.clip(sev * rng.uniform(0.5, 1.5), 0.0, 1.0))
 
     a_slow, a_jerk, a_acc = comp(), comp(), comp()
     has_tremor = rng.random() < 0.10 + 0.5 * sev
     a_trem = comp() if has_tremor else 0.0
 
-    skill = rng.normal(0.0, 1.0)  # healthy people differ too
+    skill = rng.normal(0.0, 1.0)  # general motor skill: healthy people differ too
+    style = rng.normal(0.0, 1.0)  # speed-accuracy trade-off: >0 fast & sloppy, <0 slow & precise
+    precision = float(np.exp(0.3 * style - 0.1 * skill))  # multiplies all lateral deviation
     return {
         "severity": sev,
+        "style": style,
         # careful mouse tracing ~250 units/s for a healthy person
-        "base_speed": float(250.0 * np.exp(0.2 * skill) * (1.0 - 0.65 * a_slow)),
+        "base_speed": float(250.0 * np.exp(0.2 * skill + 0.3 * style) * (1.0 - 0.65 * a_slow)),
         "corner_slowdown": float(50.0 * (1.0 + sev)),
         "speed_fluct": float(0.08 + 0.55 * a_jerk),
         "speed_fluct_corr_s": float(rng.uniform(0.15, 0.4)),
         "pause_rate_hz": float(0.01 + 0.25 * a_jerk ** 1.5),
         "pause_max_s": float(0.3 + 1.2 * sev),
-        "lateral_sd_frac": float(0.05 * np.exp(0.15 * rng.normal()) + 0.40 * a_acc),  # of channel width
+        "lateral_sd_frac": float((0.05 * np.exp(0.25 * rng.normal()) + 0.30 * a_acc) * precision),  # of channel width
         "lateral_corr_s": float(rng.uniform(0.3, 0.8)),
+        # jagged "stock chart" component: fast mean-reverting noise perpendicular to the path
+        "jitter_sd_frac": float((0.012 + 0.18 * a_acc ** 1.2) * precision),  # of channel width
+        "jitter_corr_s": float(rng.uniform(0.06, 0.15)),
         "overshoot_frac": float(0.05 + 0.6 * a_acc),  # of channel width, at corners
         "tremor_hz": float(rng.uniform(4.0, 8.0)) if has_tremor else 0.0,
         "tremor_amp": float(1.0 + 10.0 * a_trem) if has_tremor else 0.0,  # units (mouse damps tremor)
@@ -111,11 +128,11 @@ def simulate_attempt(level: Level, p: dict, rng: np.random.Generator) -> dict:
 
     knots_s, knots_t = list(s), list(t_of_s)
     down_intervals = []  # (t_start, t_end) where button is up
+    pause_intervals = []  # (t_start, t_end) where the button is held but the hand rests
     shift = 0.0
     for es, dur, held in events:
         te = float(np.interp(es, s, t_of_s)) + shift
-        if not held:
-            down_intervals.append((te, te + dur))
+        (pause_intervals if held else down_intervals).append((te, te + dur))
         shift += dur
         knots_t = [kt + dur if ks > es else kt for ks, kt in zip(knots_s, knots_t)]
         knots_s.append(es)
@@ -153,6 +170,7 @@ def simulate_attempt(level: Level, p: dict, rng: np.random.Generator) -> dict:
     n_grid = int(end_T * GRID_HZ) + 2
     grid_t = np.arange(n_grid) / GRID_HZ
     lat = smooth_noise(rng, n_grid, p["lateral_corr_s"] * GRID_HZ) * p["lateral_sd_frac"] * cw
+    lat += ou_noise(rng, n_grid, p["jitter_corr_s"] * GRID_HZ) * p["jitter_sd_frac"] * cw
     lateral = np.interp(t_s, grid_t, lat)
     # overshoot: outward of the turn, lagging slightly behind the corner
     lag = 15.0
@@ -161,33 +179,38 @@ def simulate_attempt(level: Level, p: dict, rng: np.random.Generator) -> dict:
     if max_curv > 0.01:  # only real corners (maze), not the gentle circle
         lateral += -np.sign(curv_lag) * (np.abs(curv_lag) / max_curv) * p["overshoot_frac"] * cw
 
-    xy = base_xy + normal * lateral[:, None]
-
-    # --- tremor ---------------------------------------------------------------------------
+    # --- tremor: oscillation perpendicular to the path (up/down, no loops) ------------------
     if p["tremor_amp"] > 0:
         f = p["tremor_hz"] * (1.0 + 0.05 * smooth_noise(rng, n_grid, GRID_HZ))
         phase = 2 * np.pi * np.cumsum(f) / GRID_HZ
         amp = p["tremor_amp"] * np.clip(1.0 + 0.3 * smooth_noise(rng, n_grid, 0.5 * GRID_HZ), 0.2, None)
-        theta = rng.uniform(0, np.pi)
-        osc = np.interp(t_s, grid_t, amp * np.sin(phase))
-        osc2 = np.interp(t_s, grid_t, 0.4 * amp * np.cos(phase))
-        xy += np.column_stack([osc * np.cos(theta) - osc2 * np.sin(theta), osc * np.sin(theta) + osc2 * np.cos(theta)])
+        lateral += np.interp(t_s, grid_t, amp * np.sin(phase))
 
-    # small sensor/quantization noise
-    xy += rng.normal(0.0, 0.3, xy.shape)
+    xy = base_xy + normal * lateral[:, None]
 
-    down = np.ones(len(t_s), dtype=int)
+    # --- what the browser records ----------------------------------------------------------
+    down = np.ones(len(t_s), dtype=bool)
     for a, b in down_intervals:
-        down[(t_s >= a) & (t_s < b)] = 0
+        down[(t_s >= a) & (t_s < b)] = False
+    stroke_id = np.cumsum(np.concatenate([[0], (~down[:-1] & down[1:]).astype(int)]))
+    keep = down.copy()  # mouse: points only while the left button is held
+    if p["tremor_amp"] == 0:  # a resting hand without tremor sends no pointermove events
+        for a, b in pause_intervals:
+            keep[(t_s > a + 0.03) & (t_s < b)] = False
+
+    canvas_px = int(rng.integers(CANVAS_PX[0], CANVAS_PX[1] + 1))
+    xy01 = np.round(xy / CANVAS_UNITS * canvas_px) / canvas_px  # snapped to the CSS pixel grid
 
     return {
+        "durationMs": int(round(end_T * 1000.0)),
         "completed": completed,
-        "samples": {
-            "t": np.round(t_ms).astype(int).tolist(),
-            "x": np.round(xy[:, 0], 1).tolist(),
-            "y": np.round(xy[:, 1], 1).tolist(),
-            "down": down.tolist(),
+        "series": {
+            "t": np.round(t_ms[keep]).astype(int).tolist(),
+            "x": np.round(xy01[keep, 0], 5).tolist(),
+            "y": np.round(xy01[keep, 1], 5).tolist(),
+            "strokeId": stroke_id[keep].tolist(),
         },
+        "canvas_px": canvas_px,
     }
 
 
@@ -200,16 +223,28 @@ def generate(levels: dict, n_per_level: int, seed: int):
             sev = float(rng.uniform(*SEV_RANGES[cls]))
             params = sample_params(sev, rng)
             attempt = simulate_attempt(level, params, rng)
-            score = int(round(100 * (1 - sev)))
+            score_clean = 100.0 * (1.0 - sev)
+            score = float(np.clip(round(score_clean + rng.normal(0.0, LABEL_NOISE_SD), 1), 0.0, 100.0))
+            canvas_px = attempt.pop("canvas_px")
             yield {
-                "patient_id": f"synth_{level_id}_{i:05d}",
-                "level_id": level_id,
-                "started_at": (t0 + timedelta(seconds=int(rng.integers(0, 30 * 86400)))).isoformat().replace("+00:00", "Z"),
-                **attempt,
-                "device": {"pointer_type": "mouse"},
+                "id": f"synth_{level_id}_{i:05d}",
+                "gameType": "trace",
+                "level": level.number,
+                "hand": "right",
+                "startedAt": (t0 + timedelta(seconds=int(rng.integers(0, 30 * 86400)))).isoformat().replace("+00:00", "Z"),
+                "durationMs": attempt["durationMs"],
+                "completed": attempt["completed"],
+                "series": {
+                    "targetX": (level.path[:, 0] / CANVAS_UNITS).round(5).tolist(),
+                    "targetY": (level.path[:, 1] / CANVAS_UNITS).round(5).tolist(),
+                    **attempt["series"],
+                },
+                "clientMeta": {"inputDevice": "mouse", "canvasW": canvas_px, "canvasH": canvas_px,
+                               "devicePixelRatio": 1, "userAgent": "synthetic"},
                 "label": {
-                    "severity": score_to_class(score),
-                    "score": score,
+                    "score": score,  # training target (noisy)
+                    "score_clean": round(score_clean, 1),  # latent truth, for evaluation only
+                    "impairment_class": score_to_class(score),
                     "generator": {k: round(v, 4) if isinstance(v, float) else v for k, v in params.items()},
                 },
             }

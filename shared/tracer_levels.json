@@ -3,6 +3,7 @@
   "levels": [
     {
       "level_id": "line",
+      "level": 1,
       "version": 1,
       "shape": "line",
       "path": [
@@ -14,6 +15,7 @@
     },
     {
       "level_id": "circle",
+      "level": 2,
       "version": 1,
       "shape": "circle",
       "path": [
@@ -96,6 +98,7 @@
     },
     {
       "level_id": "maze",
+      "level": 3,
       "version": 1,
       "shape": "maze",
       "path": [

@@ -9,22 +9,23 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from generator import CLASSES
-from levels import load_levels
+from common import CLASSES
+from levels import levels_by_number
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "tracer_synth.jsonl")
-    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "tracer_samples.png")
+    ap.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "data" / "tracer_samples.jpg")
     args = ap.parse_args()
 
-    levels = load_levels()
+    levels = {lv.id: lv for lv in levels_by_number().values()}
+    num_to_id = {lv.number: lv.id for lv in levels.values()}
     picked = {}
     with args.data.open(encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
-            key = (r["level_id"], r["label"]["severity"])
+            key = (num_to_id[r["level"]], r["label"]["impairment_class"])
             picked.setdefault(key, r)
 
     rows = list(levels)
@@ -38,10 +39,14 @@ def main():
             ax.plot(lv.xy[:, 0], lv.xy[:, 1], color="#ddd", lw=lv.channel_width * 0.28, solid_capstyle="round")
             ax.plot(lv.xy[:, 0], lv.xy[:, 1], color="#999", lw=0.8, ls="--")
             if r:
-                smp = r["samples"]
-                x, y, t, d = (np.array(smp[k]) for k in ("x", "y", "t", "down"))
-                ax.plot(x, y, lw=1.0, color="#1f5fbf")
-                ax.scatter(x[d == 0], y[d == 0], s=6, color="#d62728", zorder=3, label="lifted")
+                smp = r["series"]
+                x, y, t, sid = (np.array(smp[k], dtype=float) for k in ("x", "y", "t", "strokeId"))
+                x, y = x * 1000, y * 1000
+                for k in np.unique(sid):  # one line per stroke, so lifts show as breaks
+                    m = sid == k
+                    ax.plot(x[m], y[m], lw=1.0, color="#1f5fbf")
+                starts = np.nonzero(np.diff(sid) > 0)[0] + 1
+                ax.scatter(x[starts], y[starts], s=10, color="#d62728", zorder=3, label="new stroke")
                 dist, _ = lv.distance_to_path(np.column_stack([x, y]))
                 ax.set_title(f"{lid} / {cls}  score={r['label']['score']}\n"
                              f"T={t[-1] / 1000:.1f}s  rmsdev={np.sqrt((dist ** 2).mean()):.1f}  "
