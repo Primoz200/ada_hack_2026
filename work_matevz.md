@@ -160,3 +160,64 @@
 **Preverjeno:** tsc, 94 frontend testov, build; posnetki zaslona v več fazah pri 1440×900 in 390×844 v pravem čarovniku, brez vklopa kamere. Gibanja v živo nisem gledal, samo posamezne faze.
 **Znana šibkost:** pri »Dvig rok« so vmesne faze (roki kažeta proti kameri) na mirujoči sliki dvoumne; možna zamenjava je pogled s strani.
 **Kako zavreči:** `git switch matevz/camera`; veja `matevz/camera` animacij nima.
+
+## 2026-11-22 (07.06) — Statična predstavitev (branch `matevz/demo-predstavitev`)
+
+**Narejeno:** `predstavitev/`: 9 diapozitivov za 3 minute po petih točkah iz Ixtlanovega PDF (scenarij, koncept, zbiranje podatkov, prototip, vpeljava), ena zgodba (Ivan Zupan). Čisti HTML, CSS in JS brez gradnje in zunanjih virov; objavi se mapa `predstavitev/`.
+**Upravljanje:** puščice, preslednica ali daljinec; `F` cel zaslon; `#5` odpre diapozitiv; na pokončnem telefonu je stran za branje; Natisni → PDF je rezerva.
+**Ključno naučeno:**
+- Zasloni in grafi so iz izolirane kopije aplikacije (ponastavitev, površen samopregled pri Ivanu, 22. 11.): 14,1 točke pod izhodiščem, 35 od 40 dni počutje 7. Če se seed ali pravila spremenijo, jih je treba posodobiti.
+- Integracija z zVEM / zVEM+, svojci, patronaža in osebni zdravnik so označeni kot predlog, ne kot narejeno.
+- Posnetki z obrazom niso vključeni, ker bo stran javna.
+**Odločil agent, potrdi Matevž:** podpis »Matevž in Primož«, naslednji korak »prostovoljci, nato pilot z enim oddelkom«, brez Ixtlanovega logotipa.
+**Preverjeno:** Chrome, WebKit in Firefox (brez okna), 5 velikosti zaslona, telefon 390 in 360 px, gostovanje v podmapi, PDF 9 strani; testi 133 backend + 94 frontend. Neodvisen pregled: najdbe popravljene; zadnjih besedilnih popravkov recenzent ni več videl.
+**Ni preverjeno:** projektor in prenosnik za nastop, prava objava, vaje s pravo kamero. `index.html` se odslej ureja ročno (generator grafov je bil enkraten).
+
+## 2026-11-22 (09.20) — Videi aplikacije (branch `matevz/demo-predstavitev`)
+
+**Odločitve (Matevž):** Primožev posnetek z obrazom (nadomesti prejšnje »brez obraza«); kratki videi v predstavitvi in celotni posebej; samo lokalni commit; zamrznitev ob 11.00 ne velja.
+**Narejeno:** diapozitivi 5–7 so videi: sledenje 16 s, kamera 19 s, zdravnik 20 s (začnejo se sami; klik ali `V` ustavi oziroma ponovi). Celotni so v `posnetki/`: 45 s, 2 min 22 s, 53 s. H.264 1080p brez zvoka.
+**Kako so nastali:** izolirana kopija aplikacije s svojo bazo, Ivan Zupan, prava zaznava in točkovanje. Namesto kamere Primoževi posnetki z `origin/compvis`: `202548` (Dlan 95,1), `202912` (Roke v stran 100), `203103` (Dvig rok 42,8). Sledenje je namenoma slabše: −14,1, »Za pregled«. Med kadriranjem in odštevanjem se predvaja začetek istega posnetka naprej in nazaj.
+**Najdeno, NI popravljeno:**
+- Kadriranje vaj z rokami zahteva vidna oba komolca (`games/camera/pick.ts`). Pri rokah ob telesu tega v prvi sekundi ne doseže 6 od 7 Primoževih posnetkov: vaja se lahko v živo ne začne, dokler pacient rok malo ne dvigne.
+- Dnevnik ukrepov piše »dr. Ana Novak je zaprl / potrdil« (moški spol), vidno tudi v videu.
+- Po zaprtju opozorila je Ivan takoj »Stabilno«, čeprav je 14 točk pod izhodiščem.
+- `_load_hook` v `scoring.py`: sočasne prve zahteve po zagonu dobijo nadomestni točkovalnik.
+**Preverjeno:** sličice vseh šestih videov, predvajanje v Chromu, WebKitu in Firefoxu, 5 velikosti zaslona, telefonska postavitev, PDF 9 strani. **Ni preverjeno:** projektor, pravi Safari ali telefon, objava.
+
+## 2026-11-22 (10.18) — En demo video (branch `matevz/single-video`)
+
+**Odločitev (Matevž):** zadošča združitev obstoječih treh videov; rezultat na svoji veji.
+**Narejeno:** `demo-video/okrevanje-doma-demo.mp4` (3:59,97; 44,0 MB) iz `posnetki/` 1 → 2 → 3 brez prekodiranja, `demo-video/OPIS.md` s poglavji in razkritji. Worktree: `.claude/worktrees/single-video`. Brez novih napisov, naslova ali dodatnega snemanja.
+**Ključno naučeno:** `AVAssetExportPresetPassthrough` pri lepljenju pusti praznino na vsakem stiku in več vnosov v `elst`. Zvezna os nastane s kopiranjem vzorcev prek `AVAssetWriter` in novimi časovnimi oznakami.
+**Preverjeno:** vseh 7199 sličic je po pikslih enakih izvirnikom, enakomerno 30 fps; celotno predvajanje v Chromu brez okna brez zastojev in izpuščenih sličic; stika, začetek in konec pregledani.
+**Najdeno, NI popravljeno:**
+- V vaji Dlan je druga oseba z delno vidnim, zamegljenim obrazom (0:56–0:57, rob glave in telesa še do 1:04). Za hip je tudi v `predstavitev/video/kamera.mp4` (okoli 3. sekunde). Pred javno objavo vprašaj oba.
+- V sliki ni razkritja o namenoma slabšem sledenju (samo v opisu); napis o posnetku namesto kamere je viden le okoli 0:50–0:53.
+- Video ne pokaže »Moj napredek«, zdravnikovega zavihka »Vaje s kamero«, preskoka vaj / poti brez kamere, podrobnosti »Nujno«, dobrega dne in telefona.
+**Ni preverjeno:** Google Drive, Safari, telefon.
+
+## 2026-11-22 (10.30) — Predstavitev za Google Predstavitve (branch `matevz/demo-predstavitev`)
+
+**Narejeno:** `predstavitev-google-slides/`: urejljiv PPTX (9 diapozitivov, povezave, opombe), `media/` (3 videi, 2 animirani črti kot MP4 in GIF), `UVOZ.md` z ročnimi koraki, `preview.png`. `predstavitev/` nespremenjena. Nič objavljeno ali commitano; skripte so bile začasne.
+**Ključno naučeno:**
+- Chrome na Macu BT.709 bere z gamo 1,961: `#27475a` postane `rgb(43,80,101)`. Animaciji sta zato barvno predkompenzirani; za Windows je rezerva GIF.
+- Hanken Grotesk ni nameščen, PowerPoint ga zamenja s Calibrijem. Za preverjanje se lahko vdela v preizkusno kopijo PPTX.
+- Google nima razmika med črkami: naslovi so ~5 % širši, prelomi isti.
+- PPTX, `preview.png` in `kamera.mp4` vsebujejo Primožev obraz: ne v javno objavo.
+**Preverjeno:** besedilo znak za znakom, izris v PowerPointu, sličice animacij nad diapozitivom, povezave. **Ni preverjeno:** uvoz v Google, videi iz Driva, Windows, projektor.
+
+## 2026-11-22 (10.59) — Kratek demo video (branch `matevz/single-video`)
+
+**Odločitev (Matevž):** krajša različica z eno nalogo sledenja, eno vajo s kamero in zdravnikovim pogledom.
+**Narejeno:** `demo-video/okrevanje-doma-demo-kratek.mp4` (52,7 s; 13,9 MB): počutje, Krog, Dlan, povzetek, zdravnik. Rezi s prelivi 0,2 s, brez pospeševanja. Prekodirano (H.264). Novi napisi: skrajšano, namenoma slabše sledenje, posnetek namesto kamere med celo prikazano vajo. Dolgi video je nespremenjen.
+**Ključno naučeno:** za reze in napise zadoščata Swift in AVFoundation (prenos ffmpeg v tej seji ni bil dovoljen).
+**Preverjeno:** 1581 sličic glede na načrtovano montažo (povprečni PSNR 54,8 dB), predvajanje v Chromu brez zastojev, vsi rezi; druga oseba iz vaje Dlan je izrezana (levi rob kadra pregledan pri vsaki sličici).
+**Znano:** »Stabilno« po zaprtju je na koncu še vidno; dnevnik ukrepov z »je zaprl« je zaradi krajšanja izpuščen. **Ni preverjeno:** Drive, Safari, telefon.
+
+## 2026-11-22 (11.13) — Združitev vej za `main`
+
+**Odločitev (Matevž):** delo v `matevz/demo-predstavitev` se commita, združi z `matevz/single-video` in nato v `main`.
+**Narejeno:** commitana `predstavitev-google-slides/` (brez začasne `~$` datoteke PowerPointa), združena veja z demo videi (v dnevniku ohranjeni vsi vnosi po času), nato lokalna združitev v `main` prek začasnega worktreeja.
+**Pozor pred pushem:** repozitorij je javen, `UVOZ.md` in vnos ob 10.30 pa pravita, da PPTX, `preview.png` in `kamera.mp4` ne gredo v javno objavo (Primožev obraz). Enak `kamera.mp4` je že javen na `origin/matevz/single-video` v `predstavitev/video/`.
+**Ključno naučeno:** ne preklapljaj glavne mape na vejo brez `predstavitev-google-slides/`, dokler ima PowerPoint odprt PPTX iz nje.
