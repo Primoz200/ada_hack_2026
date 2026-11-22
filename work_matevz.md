@@ -184,3 +184,13 @@
 - Po zaprtju opozorila je Ivan takoj »Stabilno«, čeprav je 14 točk pod izhodiščem.
 - `_load_hook` v `scoring.py`: sočasne prve zahteve po zagonu dobijo nadomestni točkovalnik.
 **Preverjeno:** sličice vseh šestih videov, predvajanje v Chromu, WebKitu in Firefoxu, 5 velikosti zaslona, telefonska postavitev, PDF 9 strani. **Ni preverjeno:** projektor, pravi Safari ali telefon, objava.
+
+## 2026-11-22 (10.30) — Predstavitev za Google Predstavitve (branch `matevz/demo-predstavitev`)
+
+**Narejeno:** `predstavitev-google-slides/`: urejljiv PPTX (9 diapozitivov, povezave, opombe), `media/` (3 videi, 2 animirani črti kot MP4 in GIF), `UVOZ.md` z ročnimi koraki, `preview.png`. `predstavitev/` nespremenjena. Nič objavljeno ali commitano; skripte so bile začasne.
+**Ključno naučeno:**
+- Chrome na Macu BT.709 bere z gamo 1,961: `#27475a` postane `rgb(43,80,101)`. Animaciji sta zato barvno predkompenzirani; za Windows je rezerva GIF.
+- Hanken Grotesk ni nameščen, PowerPoint ga zamenja s Calibrijem. Za preverjanje se lahko vdela v preizkusno kopijo PPTX.
+- Google nima razmika med črkami: naslovi so ~5 % širši, prelomi isti.
+- PPTX, `preview.png` in `kamera.mp4` vsebujejo Primožev obraz: ne v javno objavo.
+**Preverjeno:** besedilo znak za znakom, izris v PowerPointu, sličice animacij nad diapozitivom, povezave. **Ni preverjeno:** uvoz v Google, videi iz Driva, Windows, projektor.
