@@ -384,7 +384,17 @@ def test_feedback_and_selfcheck_summary_use_points_and_open_game_alert(client: T
     assert result["levelsTotal"] == 6
     assert len(result["games"]) == 1
     assert result["games"][0]["gameType"] == "trace"
+    assert result["games"][0]["title"] == "Sledenje"
+    assert result["games"][0]["trend"] == "declining"
+    assert result["games"][0]["personalBestDay"] == "2026-11-21"
     assert len(result["games"][0]["points"]) == 6
+    assert set(result["games"][0]) == {
+        "gameType",
+        "title",
+        "trend",
+        "points",
+        "personalBestDay",
+    }
     assert result["games"][0]["points"][-1] == {
         "day": "2026-11-21",
         "value": -4.0,

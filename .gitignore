@@ -13,3 +13,6 @@ frontend/public/vendor/
 
 # camera recording videos stay out of the repo (landmark JSONs are kept: tests read them)
 backend/models/data/camera/recordings/*.webm
+
+# generated backend (turri): local SQLite demo database
+backend_turri/data/

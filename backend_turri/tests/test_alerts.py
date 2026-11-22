@@ -97,6 +97,31 @@ def test_divergence_uses_camera_and_reports_cross_game_sentence(client: TestClie
         )
 
 
+def test_divergence_ignores_older_delta_when_latest_game_snapshot_has_none(
+    client: TestClient,
+) -> None:
+    day = date(2026, 11, 21)
+    with Session(database.engine) as session:
+        for offset in range(13, 6, -1):
+            _add_checkin(session, day - timedelta(days=offset), 7, 3)
+        for offset in range(6, -1, -1):
+            _add_checkin(session, day - timedelta(days=offset), 7, 3)
+        _add_snapshot(session, day - timedelta(days=1), -12.0)
+        session.add(
+            TrendSnapshot(
+                patient_id="p3",
+                metric="trace:all",
+                day=day,
+                sessions=10,
+                delta=None,
+                direction="insufficient_data",
+            )
+        )
+        session.commit()
+
+        assert divergence(session, "p3", day) == (False, None)
+
+
 def test_divergence_stable_results_and_worse_wellbeing(client: TestClient) -> None:
     day = date(2026, 11, 21)
     with Session(database.engine) as session:

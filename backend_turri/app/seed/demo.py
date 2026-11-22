@@ -11,13 +11,13 @@ from sqlmodel import Session, select
 
 from app.db import create_schema, reset_schema
 from app.models.tables import Alert, Clinician, Pathway, Patient
-from app.seed.camera_seed import features as camera_features
+from app.seed.camera import features as camera_seed_features
 from app.seed.stories import STORIES, rng_for
-from app.seed.trace_generator import level_features, synthetic_trace
+from app.seed.traces import level_features, synthetic_trace
 from app.services import clock
 from app.services.alerts import sweep_missing_data_alerts
 from app.services.ingest import ingest_checkin, ingest_game_session
-from app.services.scoring import camera_exercises
+from app.services.scoring import camera_duration_s
 
 PATHWAY_ROWS: tuple[tuple[str, str], ...] = (
     ("stroke", "Možganska kap"),
@@ -218,11 +218,8 @@ def replay_demo_history(session: Session, today: date) -> None:
                         preset_score=scores[level],
                         preset_features=features,
                     )
-                exercise_durations = {
-                    int(item["level"]): float(item["duration_s"]) for item in camera_exercises()
-                }
                 for level, score in sorted(camera_scores.items()):
-                    generated_features = camera_features(
+                    generated_features = camera_seed_features(
                         level, score, rng_for(patient.id, day_index, f"camfeat{level}")
                     )
                     camera_client_meta: dict[str, Any] = {
@@ -244,7 +241,7 @@ def replay_demo_history(session: Session, today: date) -> None:
                         started_at=datetime.combine(
                             replay_day, time(hour, 20 + 4 * level), tzinfo=UTC
                         ),
-                        duration_ms=int(exercise_durations.get(level, 30.0) * 1000),
+                        duration_ms=int((camera_duration_s(level) or 30.0) * 1000),
                         completed=True,
                         abort_reason=None,
                         series={},

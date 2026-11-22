@@ -400,16 +400,19 @@ def _selfcheck_summary(
     total_steps = sum(len(game.get("levels", [])) for game in pathway.games)
     game_points = [
         SelfcheckGamePoints(
-            game_type=game_type,
+            game_type=game.game_type,
+            title=game.title,
+            trend=game.trend,
             points=feedback_points(
                 session,
                 patient_id,
                 as_of,
                 since=as_of - timedelta(days=13),
-                game_type=game_type,
+                game_type=game.game_type,
             ),
+            personal_best_day=game.personal_best_day,
         )
-        for game_type in _game_types_with_data(session, patient_id, as_of)
+        for game in _game_progress(session, patient_id, as_of)
     ]
     feedback = patient_feedback(session, patient_id, as_of)
     return SelfcheckSummaryOut(

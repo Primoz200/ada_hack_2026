@@ -178,6 +178,12 @@ def camera_exercises() -> list[dict[str, Any]]:
     return [exercises[level] for level in sorted(exercises)]
 
 
+def camera_duration_s(level: int) -> float | None:
+    """Return a camera exercise duration through the backend's camera bridge."""
+    exercise = next((item for item in camera_exercises() if item["level"] == level), None)
+    return float(exercise["duration_s"]) if exercise is not None else None
+
+
 def _finite_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 

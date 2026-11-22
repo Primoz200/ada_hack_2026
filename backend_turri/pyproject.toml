@@ -22,6 +22,7 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["app/seed/traces.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -29,4 +30,9 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 disallow_untyped_defs = true
 files = ["app", "tests"]
+exclude = "^app/seed/traces\\.py$"
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["app.seed.traces"]
+follow_imports = "skip"

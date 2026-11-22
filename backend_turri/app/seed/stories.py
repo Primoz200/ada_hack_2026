@@ -11,6 +11,7 @@ LEVELS = (1, 2, 3)
 LEVEL_OFFSET = {1: 5.0, 2: 0.0, 3: -7.0}
 CAMERA_LEVEL_OFFSET = {1: 2.0, 2: 0.0, 3: -3.0}
 CAMERA_OPTIONAL = (2, 3)
+CLINICIAN_ID = "c1"
 P2_CAMERA_DIP = {16: -12.0, 17: -15.0, 18: -17.0, 19: -18.0, 20: -19.0, 21: -23.0}
 
 
@@ -97,9 +98,17 @@ def _demo_curve(k: int) -> float:
     return 63.0 + 0.1 * k
 
 
+def _p1_camera(k: int) -> float:
+    return min(94.0, 84.0 + 0.35 * k)
+
+
+def _p2_camera(k: int) -> float:
+    return 86.0 + 6.0 * (1.0 - math.exp(-k / 6.0))
+
+
 def _p3_camera(k: int) -> float:
     if k <= 21:
-        return 88.0 + (91.5 - 88.0) * k / 21
+        return 88.0 + 3.5 * k / 21.0
     return 91.5 - 0.48 * (k - 21)
 
 
@@ -107,8 +116,20 @@ def _p4_camera(k: int) -> float:
     return 90.0 if k <= 26 else 90.0 - 1.9 * (k - 26)
 
 
-def _p2_camera(k: int) -> float:
+def _p5_camera(k: int) -> float:
+    return min(94.0, 83.0 + 0.4 * k)
+
+
+def _p6_camera(k: int) -> float:
     return 90.0
+
+
+def _p7_camera(k: int) -> float:
+    return 84.0 + 0.3 * k
+
+
+def _p9_camera(k: int) -> float:
+    return 87.0
 
 
 @dataclass(frozen=True)
@@ -129,7 +150,9 @@ class Story:
     input_device: str = "touch"
     camera_curve: Callable[[int], float] | None = None
     camera_bad_days: dict[int, float] = field(default_factory=dict)
+    camera_noise: float = 1.5
     camera_skip_prob: float = 0.12
+    camera_levels: tuple[int, ...] = LEVELS
 
     def active(self, k: int) -> bool:
         if k < self.from_k:
@@ -144,23 +167,25 @@ class Story:
         return not (missed and not prev_missed and not next_missed)
 
     def camera_plan(self, k: int) -> dict[int, float]:
+        """Return today's camera levels and scores according to the story's camera plan."""
         if self.camera_curve is None:
             return {}
         base = self.camera_curve(k) + self.camera_bad_days.get(k, 0.0)
         result: dict[int, float] = {}
-        for level in LEVELS:
+        for level in self.camera_levels:
             if (
                 level in CAMERA_OPTIONAL
                 and rng_for(self.id, k, f"camskip{level}").random() < self.camera_skip_prob
             ):
                 continue
-            score_noise = rng_for(self.id, k, f"cam{level}").gauss(0, 1.5)
+            score_noise = rng_for(self.id, k, f"cam{level}").gauss(0, self.camera_noise)
             result[level] = round(
                 _clip(base + CAMERA_LEVEL_OFFSET[level] + score_noise, 4.0, 100.0), 1
             )
         return result
 
     def plan(self, k: int) -> tuple[dict[str, int], dict[int, float], dict[int, float]] | None:
+        """Return ratings, trace scores and camera scores for one active story day."""
         if not self.active(k):
             return None
         center = self.curve(k) + self.bad_days.get(k, 0.0)
@@ -182,7 +207,7 @@ class Story:
 
 
 STORIES = [
-    Story("p1", 28, _ramp(50, 0.85, 76), _rt_p1, reliable_from=24),
+    Story("p1", 28, _ramp(50, 0.85, 76), _rt_p1, reliable_from=24, camera_curve=_p1_camera),
     Story(
         "p2",
         36,
@@ -194,10 +219,11 @@ STORIES = [
         camera_curve=_p2_camera,
         camera_bad_days=P2_CAMERA_DIP,
         acks={
-            21: (
+            22: (
                 True,
                 "false_alarm",
-                "Pregled meritev je pokazal lažni alarm pri vajah s kamero.",
+                "Pogovor s pacientom: kamera je bila postavljena prenizko, roki nista bili v "
+                "kadru. Navodila za postavitev ponovljena.",
             ),
         },
     ),
@@ -211,8 +237,19 @@ STORIES = [
         level_offsets={1: 2.0, 2: 0.0, 3: -2.0},
         input_device="mouse",
         camera_curve=_p3_camera,
+        camera_noise=0.6,
+        camera_skip_prob=0.0,
     ),
-    Story("p4", 35, _p4_curve, _rt_p4, noise=2.0, reliable_from=24, camera_curve=_p4_camera),
+    Story(
+        "p4",
+        35,
+        _p4_curve,
+        _rt_p4,
+        noise=2.0,
+        reliable_from=24,
+        camera_curve=_p4_camera,
+        camera_noise=1.2,
+    ),
     Story(
         "p5",
         28,
@@ -220,6 +257,7 @@ STORIES = [
         _rt_p5,
         noise=2.5,
         reliable_from=22,
+        camera_curve=_p5_camera,
         always=frozenset({4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}),
         acks={
             13: (False, None, None),
@@ -231,7 +269,16 @@ STORIES = [
             ),
         },
     ),
-    Story("p6", 30, lambda k: 64.0, _rt_p6, noise=2.0, reliable_from=20),
+    Story(
+        "p6",
+        30,
+        lambda k: 64.0,
+        _rt_p6,
+        noise=2.0,
+        reliable_from=20,
+        camera_curve=_p6_camera,
+        camera_noise=1.0,
+    ),
     Story(
         "p7",
         15,
@@ -239,6 +286,8 @@ STORIES = [
         _rt_p7,
         days=frozenset({1, 2, 3, 5, 6, 9}),
         input_device="mouse",
+        camera_curve=_p7_camera,
+        camera_levels=(1,),
     ),
     Story(
         "p8",
@@ -250,6 +299,15 @@ STORIES = [
         always=frozenset({11, 21}),
         bad_days={11: -12.0, 21: -20.0},
     ),
-    Story("p9", 3, lambda k: 55.0, _rt_p9, skip_prob=0.0),
+    Story(
+        "p9",
+        3,
+        lambda k: 55.0,
+        _rt_p9,
+        skip_prob=0.0,
+        camera_curve=_p9_camera,
+        camera_skip_prob=0.0,
+    ),
     Story("demo", 21, _demo_curve, _rt_demo, noise=1.2, reliable_from=6),
 ]
+BY_ID = {story.id: story for story in STORIES}

@@ -175,7 +175,10 @@ class GameProgress(ApiModel):
 
 class SelfcheckGamePoints(ApiModel):
     game_type: Literal["trace", "camera"]
+    title: str
+    trend: Literal["unknown", "stable", "improving", "declining"]
     points: list[FeedbackPoint]
+    personal_best_day: date | None
 
 
 class SelfcheckSummaryOut(ApiModel):

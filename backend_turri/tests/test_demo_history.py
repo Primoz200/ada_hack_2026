@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import os
+import random
 from collections.abc import Generator
 from datetime import UTC, date, datetime, time, timedelta
 
@@ -12,10 +14,10 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.models.tables import Alert, Checkin, GameSession, GameSessionRaw
-from app.seed.camera_seed import features as camera_features
+from app.seed.camera import features as camera_seed_features
 from app.seed.demo import seed_demo
 from app.seed.stories import STORIES, rng_for
-from app.seed.trace_generator import level_features, synthetic_trace
+from app.seed.traces import level_features, synthetic_trace
 from app.services import clock
 
 
@@ -44,6 +46,130 @@ def history_engine() -> Generator[Engine, None, None]:
         os.environ.pop("APP_SEED_HISTORY", None)
     else:
         os.environ["APP_SEED_HISTORY"] = prior_history
+
+
+def test_camera_seed_features_are_deterministic() -> None:
+    expected = {
+        1: {
+            "fps": 28.2,
+            "detect_frac": 0.994,
+            "quality_ok": 1.0,
+            "n_reps": 7.0,
+            "part_position": 0.685,
+            "part_reps": 1.0,
+            "open_level": 1.439,
+            "fist_level": 0.883,
+            "open_range": 0.556,
+            "part_open": 0.677,
+            "part_close": 0.692,
+            "visibility": 1.0,
+        },
+        2: {
+            "fps": 20.2,
+            "detect_frac": 0.974,
+            "quality_ok": 1.0,
+            "n_reps": 5.0,
+            "part_position": 0.685,
+            "part_reps": 1.0,
+            "top_level": 82.199,
+            "rest_level": 15.085,
+            "lean_deg": 2.17,
+            "hike": 0.19,
+            "top_visibility": 0.92,
+            "part_lean_penalty": 0.0,
+            "part_hike_penalty": 0.0,
+        },
+        3: {
+            "fps": 21.8,
+            "detect_frac": 0.992,
+            "quality_ok": 1.0,
+            "n_reps": 5.0,
+            "part_position": 0.685,
+            "part_reps": 1.0,
+            "top_level": 1.38,
+            "rest_level": -1.17,
+            "lean_deg": 3.55,
+            "hike": 0.209,
+            "top_visibility": 0.858,
+            "part_lean_penalty": 0.0,
+            "part_hike_penalty": 0.0,
+        },
+    }
+    for level, expected_features in expected.items():
+        assert (
+            camera_seed_features(level, 73.2, random.Random(f"p3:12:camfeat{level}"))
+            == expected_features
+        )
+
+
+def test_demo_story_registry_preserves_camera_story_coverage() -> None:
+    stories = {story.id: story for story in STORIES}
+    assert set(stories) == {"p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "demo"}
+    assert all(
+        stories[patient_id].camera_curve is not None
+        for patient_id in ("p1", "p2", "p3", "p4", "p5", "p6", "p7", "p9")
+    )
+    assert stories["p8"].camera_curve is None
+    assert stories["demo"].camera_curve is None
+    assert all(
+        stories[patient_id].camera_levels == (1, 2, 3)
+        for patient_id in ("p1", "p2", "p3", "p4", "p5", "p6", "p9")
+    )
+    assert stories["p3"].camera_noise == 0.6
+    assert stories["p3"].camera_skip_prob == 0.0
+    assert stories["p4"].camera_noise == 1.2
+    assert stories["p6"].camera_noise == 1.0
+    assert stories["p7"].camera_levels == (1,)
+    assert stories["p9"].camera_skip_prob == 0.0
+    assert stories["p1"].camera_curve is not None
+    assert stories["p1"].camera_curve(10) == 87.5
+    assert stories["p2"].camera_curve is not None
+    assert stories["p2"].camera_curve(6) == pytest.approx(86 + 6 * (1 - math.exp(-1)))
+    assert stories["p5"].camera_curve is not None
+    assert stories["p5"].camera_curve(40) == 94.0
+    assert stories["p6"].camera_curve is not None
+    assert stories["p6"].camera_curve(40) == 90.0
+    assert stories["p7"].camera_curve is not None
+    assert stories["p7"].camera_curve(10) == 87.0
+    assert stories["p9"].camera_curve is not None
+    assert stories["p9"].camera_curve(10) == 87.0
+
+
+def test_camera_plan_uses_per_story_noise_skip_levels_and_bad_days() -> None:
+    p2 = next(story for story in STORIES if story.id == "p2")
+    expected: dict[int, float] = {}
+    assert p2.camera_curve is not None
+    base = p2.camera_curve(16) + p2.camera_bad_days[16]
+    for level in p2.camera_levels:
+        if level in (2, 3) and rng_for("p2", 16, f"camskip{level}").random() < p2.camera_skip_prob:
+            continue
+        expected[level] = round(
+            max(
+                4.0,
+                min(
+                    100.0,
+                    base
+                    + {1: 2.0, 2: 0.0, 3: -3.0}[level]
+                    + rng_for("p2", 16, f"cam{level}").gauss(0, p2.camera_noise),
+                ),
+            ),
+            1,
+        )
+    assert p2.camera_plan(16) == expected
+
+    p3 = next(story for story in STORIES if story.id == "p3")
+    assert set(p3.camera_plan(12)) == {1, 2, 3}
+    assert next(story for story in STORIES if story.id == "p7").camera_plan(1).keys() == {1}
+    assert next(story for story in STORIES if story.id == "p8").camera_plan(1) == {}
+    assert next(story for story in STORIES if story.id == "demo").camera_plan(1) == {}
+
+    p2_action = p2.acks[22]
+    assert p2_action == (
+        True,
+        "false_alarm",
+        "Pogovor s pacientom: kamera je bila postavljena prenizko, roki nista bili v kadru. "
+        "Navodila za postavitev ponovljena.",
+    )
 
 
 def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engine: Engine) -> None:
@@ -112,7 +238,7 @@ def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engi
             ).all()
             assert {game.level: game.score for game in first_day_cameras} == expected_camera_scores
             for game in first_day_cameras:
-                expected_features = camera_features(
+                expected_features = camera_seed_features(
                     game.level,
                     expected_camera_scores[game.level],
                     rng_for(checkin.patient_id, day_index, f"camfeat{game.level}"),
@@ -202,6 +328,11 @@ def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engi
     ]
     assert p2_closed
     assert p2_closed[-1].closed_by == "dr. Ana Novak"
+    assert p2_closed[-1].closed_at == datetime(2026, 11, 7, 12, tzinfo=UTC)
+    assert p2_closed[-1].note == (
+        "Pogovor s pacientom: kamera je bila postavljena prenizko, roki nista bili v kadru. "
+        "Navodila za postavitev ponovljena."
+    )
     assert p2_closed[-1].evidence["triggers"]
     assert all(trigger.get("game") == "camera" for trigger in p2_closed[-1].evidence["triggers"])
     assert clock.today() == today

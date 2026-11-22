@@ -107,7 +107,6 @@ def _latest_game_deltas(session: Session, patient_id: str, day: date) -> dict[st
                 column("patient_id") == patient_id,
                 column("metric") == f"{game_type}:all",
                 column("day") <= day,
-                column("delta").is_not(None),
             )
             .order_by(column("day").desc(), column("id").desc())
         ).first()
