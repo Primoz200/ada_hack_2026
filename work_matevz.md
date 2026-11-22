@@ -184,3 +184,15 @@
 - Po zaprtju opozorila je Ivan takoj »Stabilno«, čeprav je 14 točk pod izhodiščem.
 - `_load_hook` v `scoring.py`: sočasne prve zahteve po zagonu dobijo nadomestni točkovalnik.
 **Preverjeno:** sličice vseh šestih videov, predvajanje v Chromu, WebKitu in Firefoxu, 5 velikosti zaslona, telefonska postavitev, PDF 9 strani. **Ni preverjeno:** projektor, pravi Safari ali telefon, objava.
+
+## 2026-11-22 (10.18) — En demo video (branch `matevz/single-video`)
+
+**Odločitev (Matevž):** zadošča združitev obstoječih treh videov; rezultat na svoji veji.
+**Narejeno:** `demo-video/okrevanje-doma-demo.mp4` (3:59,97; 44,0 MB) iz `posnetki/` 1 → 2 → 3 brez prekodiranja, `demo-video/OPIS.md` s poglavji in razkritji. Worktree: `.claude/worktrees/single-video`. Brez novih napisov, naslova ali dodatnega snemanja.
+**Ključno naučeno:** `AVAssetExportPresetPassthrough` pri lepljenju pusti praznino na vsakem stiku in več vnosov v `elst`. Zvezna os nastane s kopiranjem vzorcev prek `AVAssetWriter` in novimi časovnimi oznakami.
+**Preverjeno:** vseh 7199 sličic je po pikslih enakih izvirnikom, enakomerno 30 fps; celotno predvajanje v Chromu brez okna brez zastojev in izpuščenih sličic; stika, začetek in konec pregledani.
+**Najdeno, NI popravljeno:**
+- V vaji Dlan je druga oseba z delno vidnim, zamegljenim obrazom (0:56–0:57, rob glave in telesa še do 1:04). Za hip je tudi v `predstavitev/video/kamera.mp4` (okoli 3. sekunde). Pred javno objavo vprašaj oba.
+- V sliki ni razkritja o namenoma slabšem sledenju (samo v opisu); napis o posnetku namesto kamere je viden le okoli 0:50–0:53.
+- Video ne pokaže »Moj napredek«, zdravnikovega zavihka »Vaje s kamero«, preskoka vaj / poti brez kamere, podrobnosti »Nujno«, dobrega dne in telefona.
+**Ni preverjeno:** Google Drive, Safari, telefon.
