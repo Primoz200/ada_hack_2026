@@ -214,3 +214,10 @@
 **Ključno naučeno:** za reze in napise zadoščata Swift in AVFoundation (prenos ffmpeg v tej seji ni bil dovoljen).
 **Preverjeno:** 1581 sličic glede na načrtovano montažo (povprečni PSNR 54,8 dB), predvajanje v Chromu brez zastojev, vsi rezi; druga oseba iz vaje Dlan je izrezana (levi rob kadra pregledan pri vsaki sličici).
 **Znano:** »Stabilno« po zaprtju je na koncu še vidno; dnevnik ukrepov z »je zaprl« je zaradi krajšanja izpuščen. **Ni preverjeno:** Drive, Safari, telefon.
+
+## 2026-11-22 (11.13) — Združitev vej za `main`
+
+**Odločitev (Matevž):** delo v `matevz/demo-predstavitev` se commita, združi z `matevz/single-video` in nato v `main`.
+**Narejeno:** commitana `predstavitev-google-slides/` (brez začasne `~$` datoteke PowerPointa), združena veja z demo videi (v dnevniku ohranjeni vsi vnosi po času), nato lokalna združitev v `main` prek začasnega worktreeja.
+**Pozor pred pushem:** repozitorij je javen, `UVOZ.md` in vnos ob 10.30 pa pravita, da PPTX, `preview.png` in `kamera.mp4` ne gredo v javno objavo (Primožev obraz). Enak `kamera.mp4` je že javen na `origin/matevz/single-video` v `predstavitev/video/`.
+**Ključno naučeno:** ne preklapljaj glavne mape na vejo brez `predstavitev-google-slides/`, dokler ima PowerPoint odprt PPTX iz nje.
