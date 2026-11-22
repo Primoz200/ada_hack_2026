@@ -8,4 +8,7 @@ ENV_FILE="${TURRI_ENV_FILE:-$HOME/.config/turri/bedrock.env}"
 set -a; . "$ENV_FILE"; set +a
 cd "$(dirname "$0")"
 export TURRI_COMMAND_TIMEOUT="${TURRI_COMMAND_TIMEOUT:-600}"
+# the real ML models and camera recordings the conformance tests use (outside this module)
+export BACKEND_MODELS_DIR="${BACKEND_MODELS_DIR:-$(cd .. && pwd)/backend/models}"
+export CAMERA_RECORDINGS_DIR="${CAMERA_RECORDINGS_DIR:-$BACKEND_MODELS_DIR/data/camera/recordings}"
 exec turri "$@"

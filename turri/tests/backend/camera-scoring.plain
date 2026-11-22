@@ -1,0 +1,20 @@
+---
+module: backend
+func_id: camera-scoring
+---
+
+***conformance tests***
+
+# real-partial-fist
+After a reset, posting the recording `20261121-202620-848_hand_open_close_right_test_P01.json` as a completed camera session of patient "p9" answers `scored` true; in the timeline of "p9" that session has score 57.7, `qualityOk` true, model version "camera-rules-0.3" and the features `open_level` and `part_position`.
+
+# real-healthy-hand
+After a reset, posting the recording `20261121-194808-033_hand_open_close_right_reference_P01.json` as a completed camera session of patient "p9" gives score 100.0 and impairment class "normal".
+
+# real-arms-to-the-side
+After a reset, posting the recording `20261121-203004-748_shoulder_abduction_right_test_P01.json` as a completed camera session of patient "p9" gives score 56.2.
+
+***acceptance tests***
+
+# poor-capture-not-scored
+After a reset, posting the recording `20261121-203631-595_shoulder_abduction_right_test_P01.json` as a completed camera session of patient "p9" answers `scored` false; in the timeline that session has a null score, `qualityOk` false and `countsForTrend` false.

@@ -1,0 +1,9 @@
+---
+module: backend
+func_id: camera-exercises
+---
+
+***conformance tests***
+
+# three-exercises
+`GET /api/camera/exercises` answers 200 with three exercises, levels 1, 2 and 3: level 1 has key "hand_open_close", detector "hand", durationS 21, nCues 7 and openWindowS 0.5; level 2 has key "shoulder_abduction", detector "pose", durationS 42, cuePeriodS 8 and upS 4; level 3 has key "arm_raise"; each has a non-empty `instructions`.

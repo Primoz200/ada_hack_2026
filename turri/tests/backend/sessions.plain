@@ -16,5 +16,8 @@ After a reset, an aborted trace session (completed false, abortReason "cannot_to
 # unknown-trace-level
 A completed trace session of patient "p9" at level 4 answers 422.
 
+# unknown-camera-level
+A completed camera session of patient "p9" at level 4 answers 422.
+
 # unknown-session-raw
 `GET /api/sessions/999999/raw` answers 404.

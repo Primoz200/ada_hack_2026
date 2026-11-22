@@ -16,7 +16,8 @@ import:
   - It is the date in the environment variable `APP_TODAY` (ISO `YYYY-MM-DD`) when it is set, otherwise the real current date.
 
 - :Pathway: is a recovery pathway, configured as data: a code, a name, a frequency text, the games its self-check has (each with a game type, a title and its levels) and the daily rating questions.
-  - There are exactly two: `stroke` "Možganska kap" and `ctr` "Operacija karpalnega kanala", both with frequency "vsak dan" and the one game `{"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3]}`.
+  - There are exactly two: `stroke` "Možganska kap" and `ctr` "Operacija karpalnega kanala", both with frequency "vsak dan" and the games, in this order, `{"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3], "optionalLevels": []}` and `{"gameType": "camera", "title": "Vaje s kamero", "levels": [1, 2, 3], "optionalLevels": [2, 3]}`.
+  - An optional level is one the patient may skip.
   - Both ask the same two questions, each with kind "scale", min 1 and max 10: `wellbeing` (text "Kako se počutite danes?", short label "Počutje", min label "Zelo slabo", max label "Odlično", higherIsWorse false) and `pain` (text "Kako močna je bolečina?", short label "Bolečina", min label "Brez bolečine", max label "Zelo močna", higherIsWorse true).
 
 - :Clinician: is a clinician who handles alerts. There is exactly one: id `c1`, name "dr. Ana Novak", role "zdravnica".
@@ -25,7 +26,7 @@ import:
 
 - :Checkin: is a patient's two daily ratings, `wellbeing` (1-10, higher is better) and `pain` (1-10, higher is worse), for one day, with the time it was made.
 
-- :GameSession: is one played level of a game: patient, game type (`trace`, `camera_tapping`, `camera_reach`, `motion`), level, hand, start time, day, duration in ms, whether it was completed, an optional abort reason, the input device (`touch`, `mouse`, `camera`), the score (0-100, none when not scored), the impairment class, the model version, the features (name to number), whether it counts for the trend, and its raw data: the series (name to list of numbers) and the client meta.
+- :GameSession: is one played level of a game: patient, game type (`trace` for the tracing game, `camera` for the camera exercises), level, hand, start time, day, duration in ms, whether it was completed, an optional abort reason, the input device (`touch`, `mouse`, `camera`), the score (0-100, none when not scored), the impairment class, the model version, the features (name to number), whether it counts for the trend, the capture quality `qualityOk` (true or false for a camera session the camera scorer judged, null otherwise), and its raw data: the series (name to list of numbers, where a number may be null for a frame without a detection) and the client meta (every key the client sent, also ones not named in the :Api:).
 
 - :ImpairmentClass: of a score is `normal` from 85, `mild` from 65, `moderate` from 40, and `severe` below 40.
 
@@ -47,7 +48,13 @@ import:
 
 - :Outcome: is how a clinician closed an :Alert:, one of `called_reassured` "Poklical, pomiril", `adjusted_exercises` "Prilagodil vaje", `visit_moved_earlier` "Pregled prestavljen naprej", `urgent_referral` "Nujna napotitev", `unreachable` "Nedosegljiv", `false_alarm` "Lažni alarm ali težava s podatki".
 
-- :Scorer: is what turns a completed :GameSession: into a score, an :ImpairmentClass:, features and a model version.
+- :Scorer: is what turns a completed :GameSession: into a score (or none when it cannot be scored), an :ImpairmentClass:, features, a model version and, for a camera session, the capture quality.
+
+- :CameraModels: is the camera exercise code in `<APP_MODELS_DIR>/camera`, used read-only as [the camera bridge](resources/camera_bridge.py) uses it: its module `exercises` (the dict `EXERCISES`, level to exercise) and its module `scoring` (`MODEL_VERSION`, `load_reference()` and `score_camera(game_type, level, hand, duration_ms, series, client_meta, reference=...)`, returning `score`, `impairment_class`, `features`, `model_version`, `quality_ok` and `breakdown`).
+
+- :CameraExercise: is one camera exercise of `EXERCISES`: its level, `key`, `name`, `detector` (`hand` or `pose`), `duration_s`, `first_cue_s`, `cue_period_s`, `n_cues`, `up_s`, `open_window_s` and `instructions` (a missing key is null).
+
+- :CameraUnavailableVersion: is the model version string `camera-unavailable`.
 
 - :StandinVersion: is the model version string `standin-0.1`.
 
@@ -82,18 +89,22 @@ import:
 - :Implementation: keeps every threshold of the trend, alert, divergence and feedback rules as a named module-level constant.
 - :Implementation: loads the external tracer model lazily, at most once per process, as [the tracer bridge](resources/tracer_bridge.py) does, from `<APP_MODELS_DIR>/tracer` (its modules `common`, `features`, `levels` and its artifact `artifacts/tracer_gbm.joblib`), with that folder put on `sys.path`.
   - Any failure to import or call it is logged and makes the :Scorer: use the stand-in.
+- :Implementation: loads the :CameraModels: lazily, at most once per process, with `<APP_MODELS_DIR>/camera` appended to `sys.path` (its module `scoring` is imported by that bare name and never shadows the backend's own scoring module), and loads the camera reference once with `load_reference()`.
+  - A failure to import them is logged once and leaves the camera exercises unavailable; the backend and the tracing game keep working.
+- :Implementation: keeps every client meta key of a session, also ones the :Api: does not name (camera sessions send `videoW`, `videoH`, `fpsMeasured`, `detector` and more), passes them to the :Scorer: and stores them with the raw series.
 - :Implementation: keeps a copy of [the tracer levels](resources/tracer_levels.json) as `app/seed/tracer_levels.json` and reads the level paths from it.
 - :UnitTests: use FastAPI's `TestClient` and an in-memory SQLite engine per test, with `APP_KEEP_DB=1` and :Today: fixed to 2026-11-21.
 - :UnitTests: run with `APP_SEED_HISTORY=0`, except the tests of the history replay, which replay it once per test module and share that database.
   - The whole unit test suite finishes in under 60 seconds.
-- :UnitTests: never need `APP_MODELS_DIR` to exist: without the external model the :Scorer: falls back to the stand-in.
+- :UnitTests: never need `APP_MODELS_DIR` to exist: without the external model the :Scorer: falls back to the stand-in, and without the :CameraModels: camera sessions are stored unscored; tests of the camera bridge stand in for the :CameraModels: with fakes of their own.
 
 ***test reqs***
 
 - :ConformanceTests: use pytest and httpx, and run with `pytest`.
 - :ConformanceTests: find the built code's folder in the environment variable `BACKEND_BUILD_DIR`.
 - :ConformanceTests: start the service from that folder as a separate process with `uv run uvicorn app.main:app --host 127.0.0.1 --port <free port>`, and wait until `GET /api/meta` answers, for at most 60 seconds.
-  - The process gets `APP_TODAY=2026-11-21`, `APP_DB_URL` pointing to a SQLite file in a temporary folder and `APP_MODELS_DIR` pointing to an empty temporary folder.
+  - The process gets `APP_TODAY=2026-11-21`, `APP_DB_URL` pointing to a SQLite file in a temporary folder and `APP_MODELS_DIR` set to the folder in the environment variable `BACKEND_MODELS_DIR` (the platform's real ML models).
+- :ConformanceTests: read real camera recordings, one JSON file each with `level`, `hand`, `durationMs`, `series` and `clientMeta`, from the folder in the environment variable `CAMERA_RECORDINGS_DIR`, and post them as camera sessions.
   - One service is started for the whole test session; a test that changes data first calls `POST /api/admin/reset`.
 - :ConformanceTests: reach the service over HTTP only, never import its code, and stop it when they finish, passing or failing.
 - :ConformanceTests: check a failure by its status code, never by its message.
@@ -102,7 +113,7 @@ import:
 ***functional specs***
 
 # meta-and-pathways
-`GET /api/pathways` returns the two :Pathway: rows with their games and questions.
+`GET /api/pathways` returns the two :Pathway: rows with their games (each with `gameType`, `title`, `levels` and `optionalLevels`) and questions.
 
 `GET /api/meta` returns :Today:, `syntheticData` true, the list of :Clinician: rows, `outcomes` (each :Outcome: id to its Slovenian label), `modelVersion`, the version of the :Scorer: active now: reading it tries to load the external model if that was not tried yet, and it is the external model's `MODEL_VERSION` when it loaded and its last call did not fail, otherwise :StandinVersion: and `defaultPatientId` `p3`.
 
@@ -122,18 +133,30 @@ The :Scorer: scores a `trace` session with the external tracer model when it is 
 - The external model is called with level id `line`, `circle` or `maze` for levels 1, 2, 3 and with the coordinate series `targetX`, `targetY`, `x`, `y` multiplied by 1000; its score is clamped to 0-100 and rounded to one decimal, a non-finite score counts as a failure, and an impairment class it returns outside the four is replaced by the :ImpairmentClass: of the score.
 - The stand-in takes every k-th point of the trace (k = max(1, points // 300)), the distance of each to the nearest segment of the target polyline, and their mean `mean_dev`; accuracy = max(0, 1 - mean_dev / 0.06), speed = clamp(1 - (duration_s - 8) / 40, 0, 1), score = round(100 * (0.8 * accuracy + 0.2 * speed), 1); features `mean_dev` (4 decimals) and `duration_s` (2 decimals); version :StandinVersion:.
 - A trace with fewer than 2 target points or no trace points scores 0, `severe`, no features.
-- Any other game type scores 50, `moderate`, no features, :StandinVersion:.
+- When the stand-in itself fails (for example on null coordinates), the session is not scorable: no score, no class, no features, :StandinVersion:.
+
+# camera-exercises
+`GET /api/camera/exercises` returns every :CameraExercise:, by level, as `level`, `key`, `name`, `detector`, `durationS`, `firstCueS`, `cuePeriodS`, `nCues`, `upS`, `openWindowS` and `instructions`; it returns an empty list when the :CameraModels: are unavailable.
+
+# camera-scoring
+The :Scorer: scores a `camera` session with the :CameraModels:: `score_camera("camera", level, hand, duration_ms, series, client_meta, reference=<the loaded reference>)`. There is no stand-in for camera sessions.
+- Its features are every finite number in its `features`, plus every finite number in its `breakdown` stored as `part_<key>`; booleans and NaN are left out.
+- The capture quality is `bool(quality_ok)`. When the quality is not ok or the score is not a finite number, the session is not scorable: no score and no class, but its features, the capture quality and the model version are kept.
+- Otherwise the score is clamped to 0-100 and rounded to 1 decimal; a class outside the four :ImpairmentClass: values is replaced by the class of the score.
+- The model version is its `model_version`, or `MODEL_VERSION` of the camera `scoring` module.
+- When `score_camera` raises, the session is not scorable, with no features and that version; when the :CameraModels: are unavailable, it is not scorable with no features and :CameraUnavailableVersion:.
 
 # sessions
-`POST /api/sessions` takes a game result (`patientId`, `gameType`, `level`, `hand`, `startedAt`, `durationMs` >= 0, `completed`, `abortReason`, `series`, `clientMeta` with `inputDevice`, `canvasW`, `canvasH`, `devicePixelRatio`, `userAgent`), stores a :GameSession: for :Today: and returns `sessionId` and `scored`.
-- An unknown patient is 404 "Pacient ne obstaja"; a `trace` level other than 1, 2, 3 is 422 "Neznana stopnja igre".
-- A completed session is scored by the :Scorer: and counts for the trend; an aborted one is stored without score, class, model version or features, does not count for the trend, and `scored` is false.
+`POST /api/sessions` takes a game result (`patientId`, `gameType` `trace` or `camera`, `level`, `hand`, `startedAt`, `durationMs` >= 0, `completed`, `abortReason`, `series` whose values are lists of numbers or nulls, `clientMeta` with `inputDevice`, `canvasW`, `canvasH`, `devicePixelRatio`, `userAgent` and any further keys), stores a :GameSession: for :Today: and returns `sessionId` and `scored`.
+- An unknown patient is 404 "Pacient ne obstaja"; a level that is not one of its game's levels in the :Pathway: games (1, 2, 3 for both games) is 422 "Neznana stopnja igre"; another game type is 422.
+- A completed session is scored by the :Scorer:. It is scored, and counts for the trend, only when the :Scorer: gave a score and the capture quality is not false; otherwise it is stored without score and class, does not count for the trend, and `scored` is false, but keeps the model version, features and capture quality the :Scorer: gave.
+- An aborted session is not scored: no score, class, model version, features or capture quality; it does not count for the trend and `scored` is false.
 - Repeated sessions of the same level on the same day are all stored and all count.
 
-`GET /api/sessions/{sessionId}/raw` returns the session's id, patient, game type, level, day, score, series and client meta; an unknown id is 404 "Seja ne obstaja".
+`GET /api/sessions/{sessionId}/raw` returns the session's id, patient, game type, level, day, score, series (with its nulls) and client meta (every key that was sent); an unknown id is 404 "Seja ne obstaja".
 
 # trend-snapshots
-After a scored :GameSession: is stored, the :TrendSnapshot: rows of that patient, game type and day are recomputed and upserted.
+After a scored :GameSession: is stored, the :TrendSnapshot: rows of that patient, game type and day are recomputed and upserted. Every game has its own trends: tracing (`trace`) and camera (`camera`) histories never mix.
 - There is one `<gameType>:<level>` row for every level played that day, holding that level's :LevelTrend: and its number of sessions.
 - There is one `<gameType>:all` row holding the :CombinedTrend: (baseline, EWMA, slope and delta percent empty), whose number of sessions is the number of distinct days with a scored session so far. A level not played that day contributes its latest delta, so a self-check still in progress never shows one level as the whole trend.
 
@@ -176,18 +199,18 @@ A grey `no_data` alert (source missing, reason "Pacient že več dni nima nobene
 # patient-list
 `GET /api/patients` first runs the missing-data sweep as of :Today:, then returns :Today:, the triage counters and every patient, sorted by urgency (red, yellow, no_data, insufficient_data, stable), then newest open alert first, then sort order.
 - A patient with an open alert has the status of its severity (`no_data` for grey) and its reason; a grey one's reason is "Brez vnosa že N dni." counting to :Today:.
-- Otherwise N days without any entry (since the last entry, or the discharge), N >= 4, is `no_data` "Brez vnosa že N dni."; without a `trace:all` snapshot it is `insufficient_data` "Premalo sej za izhodišče (n od 4)." where n is the largest number of completed counting sessions of one level, at most 3; else `stable` with "Rezultati so nad izhodiščem." (improving), "Rezultati so nekoliko pod izhodiščem." (declining) or "Brez posebnosti; rezultati so blizu izhodišča.".
-- Each item has days since discharge, days to the next visit, the open alert id, diverging (the open alert's flag, otherwise the divergence as of :Today:), the game sparkline (day and delta of the last 21 `trace:all` snapshots with a delta) and the wellbeing sparkline (day and wellbeing of the last 21 check-ins).
+- Status, reason and the detail summary are about tracing. Otherwise N days without any entry (since the last entry, or the discharge), N >= 4, is `no_data` "Brez vnosa že N dni."; without a `trace:all` snapshot it is `insufficient_data` "Premalo sej za izhodišče (n od 4)." where n is the largest number of completed counting trace sessions of one trace level, at most 3; else `stable` with "Rezultati so nad izhodiščem." (improving), "Rezultati so nekoliko pod izhodiščem." (declining) or "Brez posebnosti; rezultati so blizu izhodišča.".
+- Each item has days since discharge, days to the next visit, the open alert id, diverging (the open alert's flag, otherwise the divergence as of :Today:), the game sparkline `gameSparkline` (day and delta of the last 21 `trace:all` snapshots with a delta), the camera sparkline `cameraSparkline` (the same for `camera:all`, empty without camera data) and the wellbeing sparkline (day and wellbeing of the last 21 check-ins).
 - Counters: `needsAttention` is red + yellow, `noData` is no_data, `stable` is stable + insufficient_data, `total` is all.
 
 # patient-detail
 `GET /api/patients/{patientId}` returns the patient with their :Pathway:, dates, days since discharge and to the next visit, status, reason and diverging as in the patient list, the open alert, and a summary: number of sessions and check-ins, last session and check-in days, and the latest `trace:all` delta and direction (`insufficient_data` when none). An unknown patient is 404 "Pacient ne obstaja" on every patient path.
 
-`GET /api/patients/{patientId}/timeline` returns :Today:, the discharge and next visit dates, all sessions (without raw data) by start time, all check-ins by day, all trend snapshots by day and all alerts by id, closed ones included.
+`GET /api/patients/{patientId}/timeline` returns :Today:, the discharge and next visit dates, all sessions (without raw data, each with its `qualityOk`) by start time, all check-ins by day, all trend snapshots by day and all alerts by id, closed ones included.
 
 # patient-home
-`GET /api/patients/{patientId}/home` returns exactly the fields `patientId`, `name`, `pathwayCode`, `pathwayName`, `hand` (the affected side), `today` (:Today:), `steps`, `selfcheckDoneToday` (every step done) and `lastSelfcheckDay` (the last day up to :Today: with a check-in or a session, or null).
-- Each step has exactly `id`, `kind`, `title`, `gameType`, `level` and `done`. The steps are, in order, `ratings` (kind `ratings`, title "Počutje in bolečina", `gameType` and `level` null, done when there is a check-in today) and one step per game level of the pathway with id `<gameType>:<level>`, kind `game`, its `gameType` and `level`, title "Ravna črta", "Krog", "Labirint" for trace levels 1-3 (else "Stopnja N"), done when a completed session of that level exists today.
+`GET /api/patients/{patientId}/home` returns exactly the fields `patientId`, `name`, `pathwayCode`, `pathwayName`, `hand` (the affected side), `today` (:Today:), `steps`, `selfcheckDoneToday` (the ratings and every non-camera step done; camera steps never block it: no camera, no permission and skipped exercises are all fine) and `lastSelfcheckDay` (the last day up to :Today: with a check-in or a session, or null).
+- Each step has exactly `id`, `kind`, `title`, `gameType`, `level`, `done`, `skippable` and `durationS`. The steps are, in order, `ratings` (kind `ratings`, title "Počutje in bolečina", `gameType` and `level` null, not skippable, no duration, done when there is a check-in today) and one step per game level of the pathway, games in their order, with id `<gameType>:<level>`, kind `game`, its `gameType` and `level`, title "Ravna črta", "Krog", "Labirint" for trace levels 1-3 and "Dlan", "Roke v stran", "Dvig rok" for camera levels 1-3 (else "Stopnja N"), `skippable` when the level is one of its game's optional levels, `durationS` the :CameraExercise:'s `duration_s` for a camera step (null when unavailable) and null for a trace step, done when a completed session of that game and level exists today.
 
 # patient-feedback
 Patient feedback as of a day uses the `trace:all` snapshots with a delta up to that day, oldest first; it never shows a number.
@@ -196,9 +219,11 @@ Patient feedback as of a day uses the `trace:all` snapshots with a delta up to t
 - Trend: `declining` when the patient has an open yellow or red alert with a game rule (`trend_drop`, `big_drop`, `both`) as its rule or in its triggers; else, comparing the latest delta with the one 5 session-days earlier (or the first), `declining` when latest <= -5 and at least 3 lower, `improving` when latest >= 5 and at least 3 higher, else `stable`.
 - Title and text come from [the feedback messages](resources/feedback_messages.md) by (tone, trend); `first` or `unknown` always gives the first-day message.
 
-`GET /api/patients/{patientId}/selfcheck/summary` returns exactly `tone`, `trend`, `title`, `text` (the feedback for :Today:, flat, not nested), `patientId`, `day` (:Today:), `levelsDone` (game steps done today), `levelsTotal` (game steps in total) and `points` (the points of the last 14 days, :Today: included).
+Each game also has its own progress, `games`: one entry per game with at least one `<gameType>:all` snapshot with a delta up to :Today:, tracing first, each exactly `gameType`, `title` ("Sledenje" for trace, "Vaje s kamero" for camera), `trend` (that game's trend, by the trend rule above on its own deltas; `declining` when the open yellow or red alert has a game-rule trigger of that game, a game-rule trigger without a game counting as tracing), `points` and `personalBestDay` (the day of its highest delta over the whole history, ties to the later day).
 
-`GET /api/patients/{patientId}/progress` returns exactly `tone`, `trend`, `title`, `text` (flat), `patientId`, `points` (all), `ratings` (each check-in up to :Today: as `day`, `wellbeing`, `pain`), `personalBestDay` (the day of the highest delta, ties to the later day, or null), `weekDone` (days with any entry in the last 7 days), `weekGoal` (5) and `clinicianReviewedAt` (the latest acknowledgement time of any of the patient's alerts, or null).
+`GET /api/patients/{patientId}/selfcheck/summary` returns exactly `tone`, `trend`, `title`, `text` (the feedback for :Today:, flat, not nested), `patientId`, `day` (:Today:), `levelsDone` (game steps of all games done today), `levelsTotal` (game steps in total) and `games` (each with the points of the last 14 days, :Today: included).
+
+`GET /api/patients/{patientId}/progress` returns exactly `tone`, `trend`, `title`, `text` (flat), `patientId`, `games` (each with all its points), `ratings` (each check-in up to :Today: as `day`, `wellbeing`, `pain`), `weekDone` (days with any entry in the last 7 days), `weekGoal` (5) and `clinicianReviewedAt` (the latest acknowledgement time of any of the patient's alerts, or null).
 - A point has exactly `day`, `value` (its delta rounded to 1 decimal) and `label`: `lower` at <= -5, `better` at >= 5, else `usual`.
 
 # demo-history

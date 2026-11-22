@@ -6,7 +6,10 @@ func_id: patient-home
 ***conformance tests***
 
 # selfcheck-steps
-After a reset, `GET /api/patients/p3/home` answers 200 with the steps "ratings", "trace:1", "trace:2", "trace:3" in that order; after a check-in of "p3" today, the "ratings" step is done.
+After a reset, `GET /api/patients/p3/home` answers 200 with the steps "ratings", "trace:1", "trace:2", "trace:3", "camera:1", "camera:2", "camera:3" in that order; "camera:2" and "camera:3" are skippable, "camera:1" is not and has durationS 21; after a check-in of "p3" today, the "ratings" step is done.
+
+# camera-never-blocks
+After a reset, a check-in of "p3" and one completed trace session of each level 1, 2 and 3 today make `selfcheckDoneToday` true although no camera step is done.
 
 ***acceptance tests***
 
