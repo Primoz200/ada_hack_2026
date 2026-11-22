@@ -196,3 +196,11 @@
 - V sliki ni razkritja o namenoma slabšem sledenju (samo v opisu); napis o posnetku namesto kamere je viden le okoli 0:50–0:53.
 - Video ne pokaže »Moj napredek«, zdravnikovega zavihka »Vaje s kamero«, preskoka vaj / poti brez kamere, podrobnosti »Nujno«, dobrega dne in telefona.
 **Ni preverjeno:** Google Drive, Safari, telefon.
+
+## 2026-11-22 (10.59) — Kratek demo video (branch `matevz/single-video`)
+
+**Odločitev (Matevž):** krajša različica z eno nalogo sledenja, eno vajo s kamero in zdravnikovim pogledom.
+**Narejeno:** `demo-video/okrevanje-doma-demo-kratek.mp4` (52,7 s; 13,9 MB): počutje, Krog, Dlan, povzetek, zdravnik. Rezi s prelivi 0,2 s, brez pospeševanja. Prekodirano (H.264). Novi napisi: skrajšano, namenoma slabše sledenje, posnetek namesto kamere med celo prikazano vajo. Dolgi video je nespremenjen.
+**Ključno naučeno:** za reze in napise zadoščata Swift in AVFoundation (prenos ffmpeg v tej seji ni bil dovoljen).
+**Preverjeno:** 1581 sličic glede na načrtovano montažo (povprečni PSNR 54,8 dB), predvajanje v Chromu brez zastojev, vsi rezi; druga oseba iz vaje Dlan je izrezana (levi rob kadra pregledan pri vsaki sličici).
+**Znano:** »Stabilno« po zaprtju je na koncu še vidno; dnevnik ukrepov z »je zaprl« je zaradi krajšanja izpuščen. **Ni preverjeno:** Drive, Safari, telefon.
