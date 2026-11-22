@@ -185,6 +185,18 @@
 - `_load_hook` v `scoring.py`: sočasne prve zahteve po zagonu dobijo nadomestni točkovalnik.
 **Preverjeno:** sličice vseh šestih videov, predvajanje v Chromu, WebKitu in Firefoxu, 5 velikosti zaslona, telefonska postavitev, PDF 9 strani. **Ni preverjeno:** projektor, pravi Safari ali telefon, objava.
 
+## 2026-11-22 (10.18) — En demo video (branch `matevz/single-video`)
+
+**Odločitev (Matevž):** zadošča združitev obstoječih treh videov; rezultat na svoji veji.
+**Narejeno:** `demo-video/okrevanje-doma-demo.mp4` (3:59,97; 44,0 MB) iz `posnetki/` 1 → 2 → 3 brez prekodiranja, `demo-video/OPIS.md` s poglavji in razkritji. Worktree: `.claude/worktrees/single-video`. Brez novih napisov, naslova ali dodatnega snemanja.
+**Ključno naučeno:** `AVAssetExportPresetPassthrough` pri lepljenju pusti praznino na vsakem stiku in več vnosov v `elst`. Zvezna os nastane s kopiranjem vzorcev prek `AVAssetWriter` in novimi časovnimi oznakami.
+**Preverjeno:** vseh 7199 sličic je po pikslih enakih izvirnikom, enakomerno 30 fps; celotno predvajanje v Chromu brez okna brez zastojev in izpuščenih sličic; stika, začetek in konec pregledani.
+**Najdeno, NI popravljeno:**
+- V vaji Dlan je druga oseba z delno vidnim, zamegljenim obrazom (0:56–0:57, rob glave in telesa še do 1:04). Za hip je tudi v `predstavitev/video/kamera.mp4` (okoli 3. sekunde). Pred javno objavo vprašaj oba.
+- V sliki ni razkritja o namenoma slabšem sledenju (samo v opisu); napis o posnetku namesto kamere je viden le okoli 0:50–0:53.
+- Video ne pokaže »Moj napredek«, zdravnikovega zavihka »Vaje s kamero«, preskoka vaj / poti brez kamere, podrobnosti »Nujno«, dobrega dne in telefona.
+**Ni preverjeno:** Google Drive, Safari, telefon.
+
 ## 2026-11-22 (10.30) — Predstavitev za Google Predstavitve (branch `matevz/demo-predstavitev`)
 
 **Narejeno:** `predstavitev-google-slides/`: urejljiv PPTX (9 diapozitivov, povezave, opombe), `media/` (3 videi, 2 animirani črti kot MP4 in GIF), `UVOZ.md` z ročnimi koraki, `preview.png`. `predstavitev/` nespremenjena. Nič objavljeno ali commitano; skripte so bile začasne.
@@ -194,3 +206,11 @@
 - Google nima razmika med črkami: naslovi so ~5 % širši, prelomi isti.
 - PPTX, `preview.png` in `kamera.mp4` vsebujejo Primožev obraz: ne v javno objavo.
 **Preverjeno:** besedilo znak za znakom, izris v PowerPointu, sličice animacij nad diapozitivom, povezave. **Ni preverjeno:** uvoz v Google, videi iz Driva, Windows, projektor.
+
+## 2026-11-22 (10.59) — Kratek demo video (branch `matevz/single-video`)
+
+**Odločitev (Matevž):** krajša različica z eno nalogo sledenja, eno vajo s kamero in zdravnikovim pogledom.
+**Narejeno:** `demo-video/okrevanje-doma-demo-kratek.mp4` (52,7 s; 13,9 MB): počutje, Krog, Dlan, povzetek, zdravnik. Rezi s prelivi 0,2 s, brez pospeševanja. Prekodirano (H.264). Novi napisi: skrajšano, namenoma slabše sledenje, posnetek namesto kamere med celo prikazano vajo. Dolgi video je nespremenjen.
+**Ključno naučeno:** za reze in napise zadoščata Swift in AVFoundation (prenos ffmpeg v tej seji ni bil dovoljen).
+**Preverjeno:** 1581 sličic glede na načrtovano montažo (povprečni PSNR 54,8 dB), predvajanje v Chromu brez zastojev, vsi rezi; druga oseba iz vaje Dlan je izrezana (levi rob kadra pregledan pri vsaki sličici).
+**Znano:** »Stabilno« po zaprtju je na koncu še vidno; dnevnik ukrepov z »je zaprl« je zaradi krajšanja izpuščen. **Ni preverjeno:** Drive, Safari, telefon.
