@@ -13,3 +13,12 @@ After a reset, `GET /api/alerts?status=closed` has an alert of patient "p5" clos
 
 # open-alerts-need-attention
 After a reset, `GET /api/patients` has `counters.needsAttention` of at least 1.
+
+# camera-history-is-replayed
+After a reset, `GET /api/patients/p3/timeline` has camera sessions of levels 1, 2 and 3 with model version "camera-seed", `qualityOk` true and an empty series, and `camera:all` trend snapshots; `GET /api/patients/p8/timeline` has no camera sessions.
+
+# camera-false-alarm
+After a reset, `GET /api/alerts?status=closed` has an alert of patient "p2" closed with outcome "false_alarm" whose triggers all have game "camera".
+
+# camera-sparkline
+After a reset, in `GET /api/patients` patient "p3" has a non-empty `cameraSparkline` and patient "p8" an empty one.
