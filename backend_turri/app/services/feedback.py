@@ -73,50 +73,87 @@ def _has_open_game_alert(session: Session, patient_id: str, game_type: str = "tr
             column("severity").in_(["yellow", "red"]),
         )
     ).all()
-    return any(
-        (alert.rule in GAME_ALERT_RULES and game_type == "trace")
-        or any(
-            isinstance(trigger, dict)
-            and trigger.get("rule") in GAME_ALERT_RULES
-            and trigger.get("gameType", "trace") == game_type
-            for trigger in alert.evidence.get("triggers", [])
-        )
-        for alert in alerts
-    )
+    for alert in alerts:
+        triggers = [item for item in alert.evidence.get("triggers", []) if isinstance(item, dict)]
+        if not triggers and alert.rule in GAME_ALERT_RULES and game_type == "trace":
+            return True
+        if any(
+            trigger.get("rule") in GAME_ALERT_RULES and trigger.get("game", "trace") == game_type
+            for trigger in triggers
+        ):
+            return True
+    return False
+
+
+def _single_game_trend(
+    session: Session, patient_id: str, game_type: str, snapshots: list[TrendSnapshot]
+) -> str:
+    deltas = [float(row.delta) for row in snapshots if row.delta is not None]
+    if _has_open_game_alert(session, patient_id, game_type):
+        return "declining"
+    comparison_index = max(0, len(deltas) - 1 - TREND_SESSION_DAY_LOOKBACK)
+    change = deltas[-1] - deltas[comparison_index]
+    if deltas[-1] <= -TREND_DELTA_THRESHOLD and change <= -TREND_CHANGE_THRESHOLD:
+        return "declining"
+    if deltas[-1] >= TREND_DELTA_THRESHOLD and change >= TREND_CHANGE_THRESHOLD:
+        return "improving"
+    return "stable"
 
 
 def patient_feedback(
-    session: Session, patient_id: str, as_of: date, game_type: str = "trace"
+    session: Session, patient_id: str, as_of: date, game_type: str | None = None
 ) -> FeedbackOut:
-    """Return text-only trend feedback as of a date, without exposing a score."""
-    snapshots = _snapshots(session, patient_id, as_of, game_type)
+    """Return text-only feedback; game-specific calls retain a separate trend."""
+    if game_type is not None:
+        histories = {game_type: _snapshots(session, patient_id, as_of, game_type)}
+        histories = {game: rows for game, rows in histories.items() if rows}
+    else:
+        histories = {
+            game: rows
+            for game in ("trace", "camera")
+            if (rows := _snapshots(session, patient_id, as_of, game))
+        }
     tone: Literal["first", "better", "similar", "lower"]
     trend: Literal["unknown", "stable", "improving", "declining"]
-    if not snapshots:
+    if not histories:
         tone, trend = "first", "unknown"
     else:
-        deltas = [float(row.delta) for row in snapshots if row.delta is not None]
-        prior = deltas[-(PRIOR_TONE_WINDOW + 1) : -1]
-        difference = deltas[-1] - (mean(prior) if prior else 0.0)
-        if difference >= TONE_BETTER_THRESHOLD:
-            tone = "better"
-        elif difference <= TONE_LOWER_THRESHOLD:
-            tone = "lower"
+        if game_type is not None:
+            deltas = [
+                float(row.delta) for row in next(iter(histories.values())) if row.delta is not None
+            ]
+            differences = [
+                deltas[-1]
+                - (mean(deltas[-(PRIOR_TONE_WINDOW + 1) : -1]) if len(deltas) > 1 else 0.0)
+            ]
+            trend_values = [
+                _single_game_trend(session, patient_id, game_type, next(iter(histories.values())))
+            ]
         else:
-            tone = "similar"
-
-        if _has_open_game_alert(session, patient_id, game_type):
-            trend = "declining"
-        else:
-            comparison_index = max(0, len(deltas) - 1 - TREND_SESSION_DAY_LOOKBACK)
-            comparison = deltas[comparison_index]
-            change = deltas[-1] - comparison
-            if deltas[-1] <= -TREND_DELTA_THRESHOLD and change <= -TREND_CHANGE_THRESHOLD:
-                trend = "declining"
-            elif deltas[-1] >= TREND_DELTA_THRESHOLD and change >= TREND_CHANGE_THRESHOLD:
-                trend = "improving"
-            else:
-                trend = "stable"
+            described_day = max(rows[-1].day for rows in histories.values())
+            differences = []
+            trend_values = []
+            for game, rows in histories.items():
+                deltas = [float(row.delta) for row in rows if row.delta is not None]
+                if rows[-1].day == described_day:
+                    prior = deltas[-(PRIOR_TONE_WINDOW + 1) : -1]
+                    differences.append(deltas[-1] - (mean(prior) if prior else 0.0))
+                trend_values.append(_single_game_trend(session, patient_id, game, rows))
+        difference = mean(differences)
+        tone = (
+            "better"
+            if difference >= TONE_BETTER_THRESHOLD
+            else "lower"
+            if difference <= TONE_LOWER_THRESHOLD
+            else "similar"
+        )
+        trend = (
+            "declining"
+            if "declining" in trend_values
+            else "improving"
+            if "improving" in trend_values
+            else "stable"
+        )
 
     message_tone = "first" if tone == "first" or trend == "unknown" else tone
     message_trend = "unknown" if message_tone == "first" else trend

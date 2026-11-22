@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, date, datetime, time, timedelta
-from typing import cast
+from typing import Any, cast
 
 from sqlalchemy import column
 from sqlmodel import Session, select
 
 from app.db import create_schema, reset_schema
 from app.models.tables import Alert, Clinician, Pathway, Patient
+from app.seed.camera_seed import features as camera_features
 from app.seed.stories import STORIES, rng_for
 from app.seed.trace_generator import level_features, synthetic_trace
 from app.services import clock
 from app.services.alerts import sweep_missing_data_alerts
 from app.services.ingest import ingest_checkin, ingest_game_session
+from app.services.scoring import camera_exercises
 
 PATHWAY_ROWS: tuple[tuple[str, str], ...] = (
     ("stroke", "Možganska kap"),
@@ -157,7 +159,7 @@ def replay_demo_history(session: Session, today: date) -> None:
             day_index = (replay_day - patient.discharge_date).days
             plan = story.plan(day_index)
             if plan is not None:
-                answers, scores = plan
+                answers, scores, camera_scores = plan
                 hour = 8 + sum(map(ord, patient.id)) % 9
                 ingest_checkin(
                     session,
@@ -215,6 +217,43 @@ def replay_demo_history(session: Session, today: date) -> None:
                         day=replay_day,
                         preset_score=scores[level],
                         preset_features=features,
+                    )
+                exercise_durations = {
+                    int(item["level"]): float(item["duration_s"]) for item in camera_exercises()
+                }
+                for level, score in sorted(camera_scores.items()):
+                    generated_features = camera_features(
+                        level, score, rng_for(patient.id, day_index, f"camfeat{level}")
+                    )
+                    camera_client_meta: dict[str, Any] = {
+                        "inputDevice": "camera",
+                        "canvasW": 1280,
+                        "canvasH": 720,
+                        "devicePixelRatio": 1,
+                        "userAgent": "seed (camera)",
+                        "videoW": 1280,
+                        "videoH": 720,
+                        "fpsMeasured": generated_features["fps"],
+                    }
+                    ingest_game_session(
+                        session,
+                        patient_id=patient.id,
+                        game_type="camera",
+                        level=level,
+                        hand=patient.side,
+                        started_at=datetime.combine(
+                            replay_day, time(hour, 20 + 4 * level), tzinfo=UTC
+                        ),
+                        duration_ms=int(exercise_durations.get(level, 30.0) * 1000),
+                        completed=True,
+                        abort_reason=None,
+                        series={},
+                        client_meta=camera_client_meta,
+                        day=replay_day,
+                        preset_score=score,
+                        preset_features=generated_features,
+                        preset_model_version="camera-seed",
+                        preset_quality_ok=True,
                     )
         sweep_missing_data_alerts(session, replay_day)
         for story in STORIES:

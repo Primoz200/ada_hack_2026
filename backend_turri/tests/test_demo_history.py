@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.models.tables import Alert, Checkin, GameSession, GameSessionRaw
+from app.seed.camera_seed import features as camera_features
 from app.seed.demo import seed_demo
 from app.seed.stories import STORIES, rng_for
 from app.seed.trace_generator import level_features, synthetic_trace
@@ -54,13 +55,20 @@ def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engi
         alerts = list(session.exec(select(Alert)).all())
 
     assert checkins
-    assert len(games) == len(checkins) * 3
+    trace_games = [game for game in games if game.game_type == "trace"]
+    camera_games = [game for game in games if game.game_type == "camera"]
+    assert len(trace_games) == len(checkins) * 3
+    assert camera_games
     assert len(raws) == len(games)
     assert all(game.completed and game.counts_for_trend for game in games)
-    assert all(game.model_version == "standin-0.1" for game in games)
+    assert all(game.model_version == "standin-0.1" for game in trace_games)
+    assert all(
+        game.model_version == "camera-seed" and game.quality_ok is True for game in camera_games
+    )
     assert all(game.score is not None and game.impairment_class is not None for game in games)
     assert all(
-        set(game.features) == {"dev_mean", "duration_s", "n_pauses", "n_lifts"} for game in games
+        set(game.features) == {"dev_mean", "duration_s", "n_pauses", "n_lifts"}
+        for game in trace_games
     )
     assert all(game.day < today for game in games)
     assert all(checkin.day < today for checkin in checkins)
@@ -82,7 +90,7 @@ def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engi
             day_index = (checkin.day - discharge_day).days
             plan = story.plan(day_index)
             assert plan is not None
-            expected_ratings, expected_scores = plan
+            expected_ratings, expected_scores, expected_camera_scores = plan
             assert checkin.answers == {
                 "wellbeing": float(expected_ratings["wellbeing"]),
                 "pain": float(expected_ratings["pain"]),
@@ -91,9 +99,28 @@ def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engi
                 select(GameSession).where(
                     GameSession.patient_id == checkin.patient_id,
                     GameSession.day == checkin.day,
+                    GameSession.game_type == "trace",
                 )
             ).all()
             assert {game.level: game.score for game in first_day_games} == expected_scores
+            first_day_cameras = session.exec(
+                select(GameSession).where(
+                    GameSession.patient_id == checkin.patient_id,
+                    GameSession.day == checkin.day,
+                    GameSession.game_type == "camera",
+                )
+            ).all()
+            assert {game.level: game.score for game in first_day_cameras} == expected_camera_scores
+            for game in first_day_cameras:
+                expected_features = camera_features(
+                    game.level,
+                    expected_camera_scores[game.level],
+                    rng_for(checkin.patient_id, day_index, f"camfeat{game.level}"),
+                )
+                assert game.features == expected_features
+                raw = session.get(GameSessionRaw, game.id)
+                assert raw is not None and raw.series == {}
+                assert raw.client_meta["fpsMeasured"] == expected_features["fps"]
             for game in first_day_games:
                 generated_features = level_features(
                     game.level,
@@ -129,6 +156,7 @@ def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engi
                 select(GameSession).where(
                     GameSession.patient_id == checkin.patient_id,
                     GameSession.day == checkin.day,
+                    GameSession.game_type == "trace",
                 )
             ).all()
             assert len(patient_games) == 3
@@ -152,12 +180,30 @@ def test_story_entries_are_replayed_with_seeded_scores_and_metadata(history_engi
                 )
                 assert raw.client_meta["userAgent"] == f"seed ({patient.input_device})"
 
+        for game in camera_games[:8]:
+            raw = session.get(GameSessionRaw, game.id)
+            assert raw is not None
+            assert raw.series == {}
+            assert raw.client_meta["inputDevice"] == "camera"
+            assert raw.client_meta["videoW"] == 1280
+            assert raw.client_meta["videoH"] == 720
+            assert raw.client_meta["fpsMeasured"] == game.features["fps"]
+            assert game.started_at.minute == 20 + 4 * game.level
+
     p5_closed = [
         alert for alert in alerts if alert.patient_id == "p5" and alert.closed_by == "dr. Ana Novak"
     ]
     assert p5_closed
     assert p5_closed[-1].outcome == "called_reassured"
     assert p5_closed[-1].note is not None
+
+    p2_closed = [
+        alert for alert in alerts if alert.patient_id == "p2" and alert.outcome == "false_alarm"
+    ]
+    assert p2_closed
+    assert p2_closed[-1].closed_by == "dr. Ana Novak"
+    assert p2_closed[-1].evidence["triggers"]
+    assert all(trigger.get("game") == "camera" for trigger in p2_closed[-1].evidence["triggers"])
     assert clock.today() == today
 
 

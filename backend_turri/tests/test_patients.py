@@ -402,6 +402,34 @@ def test_feedback_and_selfcheck_summary_use_points_and_open_game_alert(client: T
     assert "value" not in result
 
 
+def test_feedback_weights_game_histories_separately(client: TestClient) -> None:
+    _add_feedback_patient()
+    with Session(database.engine) as session:
+        for index in range(6):
+            session.add(
+                TrendSnapshot(
+                    patient_id="feedback-test",
+                    metric="camera:all",
+                    day=date(2026, 11, 16) + timedelta(days=index),
+                    sessions=index + 1,
+                    delta=2.0,
+                    direction="stable",
+                )
+            )
+        session.commit()
+
+    response = client.get("/api/patients/feedback-test/progress")
+    assert response.status_code == 200
+    result = response.json()
+    assert [game["gameType"] for game in result["games"]] == ["trace", "camera"]
+    assert result["tone"] == "similar"
+    assert result["trend"] == "declining"
+    assert result["games"][0]["trend"] == "declining"
+    assert result["games"][1]["trend"] == "stable"
+    assert len(result["games"][1]["points"]) == 6
+    assert result["games"][1]["personalBestDay"] == "2026-11-21"
+
+
 def test_patient_progress_returns_all_history_and_tie_breaks_best_day_late(
     client: TestClient,
 ) -> None:

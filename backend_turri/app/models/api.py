@@ -377,4 +377,4 @@ class CameraExerciseOut(ApiModel):
     n_cues: int
     up_s: float | None = None
     open_window_s: float | None = None
-    instructions: str
+    instructions: str | None = None

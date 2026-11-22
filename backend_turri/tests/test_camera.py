@@ -155,6 +155,16 @@ def test_camera_exercise_endpoint_returns_model_data_or_empty_list(
     assert client.get("/api/camera/exercises").json() == []
 
 
+def test_camera_exercise_missing_instructions_is_null(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    exercise = {key: value for key, value in EXERCISE.items() if key != "instructions"}
+    monkeypatch.setattr(scoring, "_load_camera_model", lambda: (None, {1: exercise}))
+    response = client.get("/api/camera/exercises")
+    assert response.status_code == 200
+    assert response.json()[0]["instructions"] is None
+
+
 def test_camera_session_is_persisted_unscored_when_models_unavailable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

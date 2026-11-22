@@ -31,11 +31,11 @@ def _add_checkin(session: Session, day: date, wellbeing: int, pain: int) -> None
     )
 
 
-def _add_snapshot(session: Session, day: date, delta: float) -> None:
+def _add_snapshot(session: Session, day: date, delta: float, game_type: str = "trace") -> None:
     session.add(
         TrendSnapshot(
             patient_id="p3",
-            metric="trace:all",
+            metric=f"{game_type}:all",
             day=day,
             sessions=1,
             delta=delta,
@@ -78,6 +78,23 @@ def test_divergence_compares_latest_delta_to_normalized_weekly_index(client: Tes
         result, reason = divergence(session, "p3", day)
         assert result is True
         assert reason == DIVERGENCE_FALLING_SENTENCE
+
+
+def test_divergence_uses_camera_and_reports_cross_game_sentence(client: TestClient) -> None:
+    day = date(2026, 11, 21)
+    with Session(database.engine) as session:
+        for offset in range(13, 6, -1):
+            _add_checkin(session, day - timedelta(days=offset), 7, 3)
+        for offset in range(6, -1, -1):
+            _add_checkin(session, day - timedelta(days=offset), 7, 3)
+        _add_snapshot(session, day, 0.0, "trace")
+        _add_snapshot(session, day, -12.0, "camera")
+        session.commit()
+
+        assert divergence(session, "p3", day) == (
+            True,
+            "Rezultati meritev padajo, pacient pa poroča enako ali boljše počutje.",
+        )
 
 
 def test_divergence_stable_results_and_worse_wellbeing(client: TestClient) -> None:
@@ -135,6 +152,50 @@ def test_alert_rules_include_exact_evidence_and_combined_rule(client: TestClient
             "subjective_drop",
         ]
         assert "divergence" not in selected.evidence
+
+
+def test_game_alert_rules_and_evidence_keep_games_separate(client: TestClient) -> None:
+    day = date(2026, 11, 21)
+    with Session(database.engine) as session:
+        for game_type, deltas in (
+            ("trace", (-6.0, -7.0, -6.0, -12.0)),
+            ("camera", (-8.0, -9.0, -8.0, -25.0)),
+        ):
+            for offset, delta in zip((4, 3, 2, 1), deltas, strict=True):
+                _add_snapshot(session, day - timedelta(days=offset), delta, game_type)
+        for offset in (13, 11):
+            _add_checkin(session, day - timedelta(days=offset), 8, 2)
+        for offset in (5, 2):
+            _add_checkin(session, day - timedelta(days=offset), 6, 4)
+        session.commit()
+
+        triggers = evaluate_triggers(session, "p3", day)
+        assert [(item["rule"], item.get("game")) for item in triggers] == [
+            ("both", "camera"),
+            ("both", "trace"),
+            ("big_drop", "camera"),
+            ("trend_drop", "camera"),
+            ("trend_drop", "trace"),
+            ("subjective_drop", None),
+        ]
+        alert = evaluate_alerts(session, "p3", day)
+        assert alert is not None
+        assert alert.rule == "both"
+        assert alert.reason == "Padajo rezultati meritev in počutje hkrati."
+        assert alert.evidence["games"] == {
+            "trace": {"delta": -12.0},
+            "camera": {"delta": -25.0},
+        }
+        assert alert.evidence["delta"] == -25.0
+        assert alert.evidence["previousDeltas"] == [-8.0, -9.0, -8.0]
+        assert [(item["rule"], item.get("game")) for item in alert.evidence["triggers"][-6:]] == [
+            ("both", "camera"),
+            ("both", "trace"),
+            ("big_drop", "camera"),
+            ("trend_drop", "camera"),
+            ("trend_drop", "trace"),
+            ("subjective_drop", None),
+        ]
 
 
 def test_alert_trigger_append_order_and_noop_evaluation_preserves_updated_time(

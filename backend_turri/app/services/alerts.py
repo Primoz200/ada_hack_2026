@@ -30,13 +30,37 @@ CLINICIAN_SUPPRESSION_DAYS = 7
 NO_DATA_DAYS = 4
 NO_DATA_REASON = "Pacient že več dni nima nobenega vnosa ali meritve."
 
-DIVERGENCE_FALLING_SENTENCE = (
-    "Rezultati sledenja padajo, pacient pa poroča enako ali boljše počutje."
-)
-DIVERGENCE_STABLE_SENTENCE = "Rezultati sledenja so stabilni, pacient pa poroča slabše počutje."
-TREND_DROP_REASON = "Rezultati sledenja so že več dni pod pacientovim izhodiščem."
-BIG_DROP_REASON = "Rezultati sledenja so močno padli pod pacientovo izhodišče."
-BOTH_REASON = "Padajo rezultati sledenja in počutje hkrati."
+DIVERGENCE_FALLING_TRACE = "Rezultati sledenja padajo, pacient pa poroča enako ali boljše počutje."
+DIVERGENCE_FALLING_GAMES = "Rezultati meritev padajo, pacient pa poroča enako ali boljše počutje."
+DIVERGENCE_STABLE_TRACE = "Rezultati sledenja so stabilni, pacient pa poroča slabše počutje."
+DIVERGENCE_STABLE_GAMES = "Rezultati meritev so stabilni, pacient pa poroča slabše počutje."
+GAME_ORDER = ("trace", "camera")
+GAME_RULES = {"trend_drop", "big_drop", "both"}
+GAME_REASONS = {
+    "trend_drop": {
+        "trace": "Rezultati sledenja so že več dni pod pacientovim izhodiščem.",
+        "camera": "Rezultati vaj s kamero so že več dni pod pacientovim izhodiščem.",
+        "both": "Padajo rezultati sledenja in vaj s kamero.",
+    },
+    "big_drop": {
+        "trace": "Rezultati sledenja so močno padli pod pacientovo izhodišče.",
+        "camera": "Rezultati vaj s kamero so močno padli pod pacientovim izhodiščem.",
+        "both": "Rezultati sledenja in vaj s kamero so močno padli pod pacientovim izhodiščem.",
+    },
+    "both": {
+        "trace": "Padajo rezultati sledenja in počutje hkrati.",
+        "camera": "Padajo rezultati meritev in počutje hkrati.",
+        "both": "Padajo rezultati meritev in počutje hkrati.",
+    },
+}
+SUBJECTIVE_REASON_WELLBEING = "Pacient poroča slabše počutje kot prejšnji teden."
+SUBJECTIVE_REASON_PAIN = "Pacient poroča močnejšo bolečino kot prejšnji teden."
+SUBJECTIVE_REASON_BOTH = "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden."
+DIVERGENCE_FALLING_SENTENCE = DIVERGENCE_FALLING_TRACE
+DIVERGENCE_STABLE_SENTENCE = DIVERGENCE_STABLE_TRACE
+TREND_DROP_REASON = GAME_REASONS["trend_drop"]["trace"]
+BIG_DROP_REASON = GAME_REASONS["big_drop"]["trace"]
+BOTH_REASON = GAME_REASONS["both"]["trace"]
 
 
 class Trigger(TypedDict):
@@ -46,6 +70,7 @@ class Trigger(TypedDict):
     day: date
     reason: str
     evidence: dict[str, Any]
+    game: str | None
 
 
 def _week_index(checkin: Checkin) -> float | None:
@@ -73,23 +98,28 @@ def _checkins(session: Session, patient_id: str, start: date, end: date) -> list
     )
 
 
-def _latest_trace_delta(session: Session, patient_id: str, day: date) -> TrendSnapshot | None:
-    return session.exec(
-        select(TrendSnapshot)
-        .where(
-            column("patient_id") == patient_id,
-            column("metric") == "trace:all",
-            column("day") <= day,
-            column("delta").is_not(None),
-        )
-        .order_by(column("day").desc(), column("id").desc())
-    ).first()
+def _latest_game_deltas(session: Session, patient_id: str, day: date) -> dict[str, float]:
+    deltas: dict[str, float] = {}
+    for game_type in GAME_ORDER:
+        snapshot = session.exec(
+            select(TrendSnapshot)
+            .where(
+                column("patient_id") == patient_id,
+                column("metric") == f"{game_type}:all",
+                column("day") <= day,
+                column("delta").is_not(None),
+            )
+            .order_by(column("day").desc(), column("id").desc())
+        ).first()
+        if snapshot is not None and snapshot.delta is not None:
+            deltas[game_type] = float(snapshot.delta)
+    return deltas
 
 
 def divergence(session: Session, patient_id: str, day: date) -> tuple[bool, str | None]:
-    """Compare the latest trace trend delta with the change in wellbeing index."""
-    snapshot = _latest_trace_delta(session, patient_id, day)
-    if snapshot is None or snapshot.delta is None:
+    """Compare available game trend deltas with the change in wellbeing index."""
+    deltas = _latest_game_deltas(session, patient_id, day)
+    if not deltas:
         return False, None
     recent_start = day - timedelta(days=DIVERGENCE_WEEK_DAYS - 1)
     previous_end = recent_start - timedelta(days=1)
@@ -107,18 +137,23 @@ def divergence(session: Session, patient_id: str, day: date) -> tuple[bool, str 
     if not recent_values or not previous_values:
         return False, None
     change = mean(recent_values) - mean(previous_values)
-    if snapshot.delta <= DIVERGENCE_DECLINE_DELTA and change >= DIVERGENCE_FLAT_WELLBEING_CHANGE:
-        return True, DIVERGENCE_FALLING_SENTENCE
+    falling_games = [game for game, delta in deltas.items() if delta <= DIVERGENCE_DECLINE_DELTA]
+    if falling_games and change >= DIVERGENCE_FLAT_WELLBEING_CHANGE:
+        sentence = (
+            DIVERGENCE_FALLING_TRACE if falling_games == ["trace"] else DIVERGENCE_FALLING_GAMES
+        )
+        return True, sentence
     if (
-        abs(snapshot.delta) < DIVERGENCE_STABLE_ABS_DELTA
+        all(abs(delta) < DIVERGENCE_STABLE_ABS_DELTA for delta in deltas.values())
         and change <= DIVERGENCE_WORSE_WELLBEING_CHANGE
     ):
-        return True, DIVERGENCE_STABLE_SENTENCE
+        sentence = DIVERGENCE_STABLE_TRACE if list(deltas) == ["trace"] else DIVERGENCE_STABLE_GAMES
+        return True, sentence
     return False, None
 
 
 def _session_ids_for_snapshot_days(
-    session: Session, patient_id: str, days: Iterable[date]
+    session: Session, patient_id: str, game_type: str, days: Iterable[date]
 ) -> list[int]:
     selected_days = sorted(set(days))
     if not selected_days:
@@ -126,7 +161,7 @@ def _session_ids_for_snapshot_days(
     rows = session.exec(
         select(GameSession).where(
             column("patient_id") == patient_id,
-            column("game_type") == "trace",
+            column("game_type") == game_type,
             column("day").in_(selected_days),
             column("counts_for_trend").is_(True),
             column("score").is_not(None),
@@ -152,63 +187,62 @@ def _latest_patient_activity(session: Session, patient_id: str, patient: Patient
 def evaluate_triggers(session: Session, patient_id: str, day: date) -> list[Trigger]:
     """Evaluate all specified alert rules for a patient as of a date."""
     triggers: list[Trigger] = []
-    snapshots = list(
-        session.exec(
-            select(TrendSnapshot)
-            .where(
-                column("patient_id") == patient_id,
-                column("metric") == "trace:all",
-                column("day") <= day,
-                column("delta").is_not(None),
-            )
-            .order_by(column("day").desc(), column("id").desc())
-        ).all()
-    )
-    if snapshots:
+    game_trend_triggers: dict[str, Trigger] = {}
+    game_big_triggers: dict[str, Trigger] = {}
+    for game_type in GAME_ORDER:
+        snapshots = list(
+            session.exec(
+                select(TrendSnapshot)
+                .where(
+                    column("patient_id") == patient_id,
+                    column("metric") == f"{game_type}:all",
+                    column("day") <= day,
+                    column("delta").is_not(None),
+                )
+                .order_by(column("day").desc(), column("id").desc())
+            ).all()
+        )
+        if not snapshots:
+            continue
         latest = snapshots[0]
         assert latest.delta is not None
-        previous = [row for row in snapshots[1:] if row.delta is not None][
-            :TREND_DROP_PREVIOUS_WINDOW
-        ]
+        previous = snapshots[1 : 1 + TREND_DROP_PREVIOUS_WINDOW]
         previous_deltas = [float(row.delta) for row in previous if row.delta is not None]
         if (
             latest.delta <= TREND_DROP_DELTA
             and sum(value <= TREND_DROP_PREVIOUS_DELTA for value in previous_deltas)
             >= TREND_DROP_REQUIRED_PREVIOUS
         ):
-            involved_days = [latest.day, *(row.day for row in previous)]
-            triggers.append(
-                {
-                    "rule": "trend_drop",
-                    "severity": "yellow",
-                    "source": "game",
-                    "day": latest.day,
-                    "reason": TREND_DROP_REASON,
-                    "evidence": {
-                        "delta": round(float(latest.delta), 1),
-                        "sessionIds": _session_ids_for_snapshot_days(
-                            session, patient_id, involved_days
-                        ),
-                        "previousDeltas": [round(value, 1) for value in previous_deltas],
-                    },
-                }
-            )
+            game_trend_triggers[game_type] = {
+                "rule": "trend_drop",
+                "severity": "yellow",
+                "source": "game",
+                "day": latest.day,
+                "reason": GAME_REASONS["trend_drop"][game_type],
+                "game": game_type,
+                "evidence": {
+                    "delta": round(float(latest.delta), 1),
+                    "sessionIds": _session_ids_for_snapshot_days(
+                        session, patient_id, game_type, [latest.day, *(row.day for row in previous)]
+                    ),
+                    "previousDeltas": [round(value, 1) for value in previous_deltas],
+                },
+            }
         if latest.delta <= BIG_DROP_DELTA:
-            triggers.append(
-                {
-                    "rule": "big_drop",
-                    "severity": "red",
-                    "source": "game",
-                    "day": latest.day,
-                    "reason": BIG_DROP_REASON,
-                    "evidence": {
-                        "delta": round(float(latest.delta), 1),
-                        "sessionIds": _session_ids_for_snapshot_days(
-                            session, patient_id, [latest.day]
-                        ),
-                    },
-                }
-            )
+            game_big_triggers[game_type] = {
+                "rule": "big_drop",
+                "severity": "red",
+                "source": "game",
+                "day": latest.day,
+                "reason": GAME_REASONS["big_drop"][game_type],
+                "game": game_type,
+                "evidence": {
+                    "delta": round(float(latest.delta), 1),
+                    "sessionIds": _session_ids_for_snapshot_days(
+                        session, patient_id, game_type, [latest.day]
+                    ),
+                },
+            }
 
     recent_week_start = day - timedelta(days=DIVERGENCE_WEEK_DAYS - 1)
     previous_week_end = recent_week_start - timedelta(days=1)
@@ -242,17 +276,18 @@ def evaluate_triggers(session: Session, patient_id: str, day: date) -> list[Trig
     pain_rise = changes["pain"] is not None and changes["pain"] >= SUBJECTIVE_CHANGE_THRESHOLD
     if wellbeing_drop or pain_rise:
         if wellbeing_drop and pain_rise:
-            reason = "Pacient poroča slabše počutje in močnejšo bolečino kot prejšnji teden."
+            reason = SUBJECTIVE_REASON_BOTH
         elif wellbeing_drop:
-            reason = "Pacient poroča slabše počutje kot prejšnji teden."
+            reason = SUBJECTIVE_REASON_WELLBEING
         else:
-            reason = "Pacient poroča močnejšo bolečino kot prejšnji teden."
+            reason = SUBJECTIVE_REASON_PAIN
         triggers.append(
             {
                 "rule": "subjective_drop",
                 "severity": "yellow",
                 "source": "checkin",
                 "day": recent[-1].day,
+                "game": None,
                 "reason": reason,
                 "evidence": {
                     "wellbeingChange": (
@@ -268,28 +303,33 @@ def evaluate_triggers(session: Session, patient_id: str, day: date) -> list[Trig
             }
         )
 
-    trend_trigger = next((item for item in triggers if item["rule"] == "trend_drop"), None)
     subjective_trigger = next(
         (item for item in triggers if item["rule"] == "subjective_drop"), None
     )
-    if trend_trigger is not None and subjective_trigger is not None:
-        trend_values = trend_trigger["evidence"]
-        subjective_values = subjective_trigger["evidence"]
-        trigger_day = max(trend_trigger["day"], subjective_trigger["day"])
-        triggers.append(
-            {
+    both_triggers: dict[str, Trigger] = {}
+    if subjective_trigger is not None:
+        for game_type, trend_trigger in game_trend_triggers.items():
+            subjective_values = subjective_trigger["evidence"]
+            both_triggers[game_type] = {
                 "rule": "both",
                 "severity": "red",
                 "source": "game",
-                "day": trigger_day,
-                "reason": BOTH_REASON,
+                "day": max(trend_trigger["day"], subjective_trigger["day"]),
+                "reason": GAME_REASONS["both"][game_type],
+                "game": game_type,
                 "evidence": {
-                    "delta": trend_values["delta"],
+                    "delta": trend_trigger["evidence"]["delta"],
                     "wellbeingChange": subjective_values["wellbeingChange"],
                     "painChange": subjective_values["painChange"],
                 },
             }
-        )
+    subjective_triggers = [item for item in triggers if item["rule"] == "subjective_drop"]
+    triggers = sorted(both_triggers.values(), key=lambda item: item["evidence"]["delta"])
+    triggers.extend(sorted(game_big_triggers.values(), key=lambda item: item["evidence"]["delta"]))
+    triggers.extend(
+        sorted(game_trend_triggers.values(), key=lambda item: item["evidence"]["delta"])
+    )
+    triggers.extend(subjective_triggers)
     return triggers
 
 
@@ -301,14 +341,27 @@ def _priority(rule: str) -> int:
     return {"both": 3, "big_drop": 2}.get(rule, 1)
 
 
-TRIGGER_ORDER = {"both": 0, "big_drop": 1, "trend_drop": 2, "subjective_drop": 3}
-
-
 def _preferred(triggers: list[Trigger]) -> Trigger:
     return max(
         triggers,
         key=lambda item: (_severity_rank(item["severity"]), _priority(item["rule"])),
     )
+
+
+def _game_rule_reason(rule: str, evidence: dict[str, Any]) -> str | None:
+    games = {
+        str(item.get("game", "trace"))
+        for item in evidence.get("triggers", [])
+        if isinstance(item, dict) and item.get("rule") == rule and rule in GAME_RULES
+    }
+    if not games:
+        return None
+    game_key = (
+        "both"
+        if {"trace", "camera"}.issubset(games)
+        else next((game for game in GAME_ORDER if game in games), "trace")
+    )
+    return GAME_REASONS[rule][game_key]
 
 
 def _alert_time(day: date, override: datetime | None = None) -> datetime:
@@ -331,15 +384,26 @@ def _is_suppressed(session: Session, patient_id: str, trigger: Trigger, as_of: d
     for alert in closed_alerts:
         if alert.closed_by in {None, "system"}:
             continue
-        prior_rules = {alert.rule}
-        prior_rules.update(
-            str(item.get("rule"))
-            for item in alert.evidence.get("triggers", [])
-            if isinstance(item, dict)
+        stored_triggers = [
+            item for item in alert.evidence.get("triggers", []) if isinstance(item, dict)
+        ]
+        prior_keys = (
+            {(alert.rule, "trace" if alert.rule in GAME_RULES else None)}
+            if not stored_triggers
+            else set()
+        )
+        for item in stored_triggers:
+            if isinstance(item, dict):
+                rule = str(item.get("rule"))
+                game = item.get("game", "trace" if rule in GAME_RULES else None)
+                prior_keys.add((rule, str(game) if game is not None else None))
+        trigger_key = (
+            trigger["rule"],
+            trigger.get("game", "trace" if trigger["rule"] in GAME_RULES else None),
         )
         closing_day = _closed_day(alert)
         if (
-            trigger["rule"] in prior_rules
+            trigger_key in prior_keys
             and _severity_rank(trigger["severity"]) <= _severity_rank(alert.severity)
             and (
                 trigger["day"] <= closing_day
@@ -354,22 +418,36 @@ def _merge_evidence(
     existing: dict[str, Any], live: list[Trigger], divergence_sentence: str | None
 ) -> tuple[dict[str, Any], bool]:
     prior_triggers = [dict(item) for item in existing.get("triggers", []) if isinstance(item, dict)]
-    seen = {(str(item.get("rule")), str(item.get("day"))) for item in prior_triggers}
+    seen = {
+        (
+            str(item.get("rule")),
+            str(item.get("game", "trace" if item.get("rule") in GAME_RULES else "")),
+            str(item.get("day")),
+        )
+        for item in prior_triggers
+    }
     appended = False
     for trigger in live:
-        seen_key = (trigger["rule"], trigger["day"].isoformat())
-        if seen_key not in seen:
-            appended = True
-            prior_triggers.append(
-                {
-                    "rule": trigger["rule"],
-                    "severity": trigger["severity"],
-                    "source": trigger["source"],
-                    "day": trigger["day"].isoformat(),
-                    "reason": trigger["reason"],
-                }
-            )
-            seen.add(seen_key)
+        game = trigger.get("game", "trace" if trigger["rule"] in GAME_RULES else None)
+        seen_key = (
+            trigger["rule"],
+            str(game) if game is not None else "",
+            trigger["day"].isoformat(),
+        )
+        if seen_key in seen:
+            continue
+        appended = True
+        recorded: dict[str, Any] = {
+            "rule": trigger["rule"],
+            "severity": trigger["severity"],
+            "source": trigger["source"],
+            "day": trigger["day"].isoformat(),
+            "reason": trigger["reason"],
+        }
+        if game is not None:
+            recorded["game"] = game
+        prior_triggers.append(recorded)
+        seen.add(seen_key)
     evidence: dict[str, Any] = dict(existing)
     evidence["triggers"] = prior_triggers
     for evidence_key in ("sessionIds", "checkinIds"):
@@ -379,12 +457,46 @@ def _merge_evidence(
         )
         if ids:
             evidence[evidence_key] = sorted(ids)
-    for evidence_key in ("delta", "previousDeltas", "wellbeingChange", "painChange", "missedDays"):
+    for evidence_key in ("wellbeingChange", "painChange", "missedDays"):
         for trigger in reversed(live):
-            value = trigger["evidence"].get(evidence_key)
-            if value is not None:
-                evidence[evidence_key] = value
+            if (
+                evidence_key in trigger["evidence"]
+                and trigger["evidence"][evidence_key] is not None
+            ):
+                evidence[evidence_key] = trigger["evidence"][evidence_key]
                 break
+    live_game_triggers = [trigger for trigger in live if trigger["rule"] in GAME_RULES]
+    if live_game_triggers:
+        game_deltas: dict[str, float] = {}
+        for trigger in live_game_triggers:
+            game = trigger.get("game", "trace")
+            delta = trigger["evidence"].get("delta")
+            if delta is not None:
+                game_deltas[str(game)] = float(delta)
+        ordered_games = {
+            game: {"delta": game_deltas[game]} for game in GAME_ORDER if game in game_deltas
+        }
+        if ordered_games:
+            evidence["games"] = ordered_games
+            worst_game = min(ordered_games, key=lambda game: ordered_games[game]["delta"])
+            evidence["delta"] = ordered_games[worst_game]["delta"]
+            worst_trend = next(
+                (
+                    trigger
+                    for trigger in live_game_triggers
+                    if trigger["rule"] == "trend_drop"
+                    and trigger.get("game", "trace") == worst_game
+                ),
+                None,
+            )
+            if worst_trend is not None:
+                evidence["previousDeltas"] = worst_trend["evidence"]["previousDeltas"]
+    else:
+        for evidence_key in ("delta", "previousDeltas"):
+            for trigger in reversed(live):
+                if trigger["evidence"].get(evidence_key) is not None:
+                    evidence[evidence_key] = trigger["evidence"][evidence_key]
+                    break
     if divergence_sentence != existing.get("divergence"):
         evidence["divergence"] = divergence_sentence
     elif "divergence" in existing:
@@ -401,7 +513,6 @@ def evaluate_alerts(
 ) -> Alert | None:
     """Merge currently firing rules into at most one open alert for the patient."""
     all_triggers = evaluate_triggers(session, patient_id, day)
-    all_triggers.sort(key=lambda trigger: TRIGGER_ORDER.get(trigger["rule"], 4))
     live = [
         trigger for trigger in all_triggers if not _is_suppressed(session, patient_id, trigger, day)
     ]
@@ -427,6 +538,7 @@ def evaluate_alerts(
                     "severity": "grey",
                     "source": "missing",
                     "day": day,
+                    "game": None,
                     "reason": NO_DATA_REASON,
                     "evidence": {"missedDays": missed_days},
                 }
@@ -451,6 +563,7 @@ def evaluate_alerts(
     if open_alert is None:
         chosen = _preferred(live)
         timestamp = _alert_time(day, evaluated_at)
+        merged_evidence = _merge_evidence({}, live, divergence_sentence)[0]
         open_alert = Alert(
             patient_id=patient_id,
             patient_name=patient.name,
@@ -458,8 +571,8 @@ def evaluate_alerts(
             rule=chosen["rule"],
             severity=chosen["severity"],
             status="new",
-            reason=chosen["reason"],
-            evidence=_merge_evidence({}, live, divergence_sentence)[0],
+            reason=_game_rule_reason(chosen["rule"], merged_evidence) or chosen["reason"],
+            evidence=merged_evidence,
             diverging=diverging,
             opened_day=day,
             created_at=timestamp,
@@ -487,6 +600,10 @@ def evaluate_alerts(
         open_alert.evidence, appended = _merge_evidence(
             open_alert.evidence, live, divergence_sentence
         )
+        if open_alert.rule in GAME_RULES:
+            open_alert.reason = (
+                _game_rule_reason(open_alert.rule, open_alert.evidence) or open_alert.reason
+            )
         open_alert.diverging = diverging
         if appended:
             open_alert.updated_at = _alert_time(day, evaluated_at)
@@ -538,6 +655,7 @@ def sweep_missing_data_alerts(session: Session, day: date) -> list[Alert]:
             "severity": "grey",
             "source": "missing",
             "day": day,
+            "game": None,
             "reason": NO_DATA_REASON,
             "evidence": {"missedDays": missed_days},
         }

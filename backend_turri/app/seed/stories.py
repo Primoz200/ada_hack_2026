@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 
 LEVELS = (1, 2, 3)
 LEVEL_OFFSET = {1: 5.0, 2: 0.0, 3: -7.0}
+CAMERA_LEVEL_OFFSET = {1: 2.0, 2: 0.0, 3: -3.0}
+CAMERA_OPTIONAL = (2, 3)
+P2_CAMERA_DIP = {16: -12.0, 17: -15.0, 18: -17.0, 19: -18.0, 20: -19.0, 21: -23.0}
 
 
 def rng_for(patient_id: str, day_index: int, tag: str = "") -> random.Random:
@@ -94,6 +97,20 @@ def _demo_curve(k: int) -> float:
     return 63.0 + 0.1 * k
 
 
+def _p3_camera(k: int) -> float:
+    if k <= 21:
+        return 88.0 + (91.5 - 88.0) * k / 21
+    return 91.5 - 0.48 * (k - 21)
+
+
+def _p4_camera(k: int) -> float:
+    return 90.0 if k <= 26 else 90.0 - 1.9 * (k - 26)
+
+
+def _p2_camera(k: int) -> float:
+    return 90.0
+
+
 @dataclass(frozen=True)
 class Story:
     id: str
@@ -110,6 +127,9 @@ class Story:
     level_offsets: dict[int, float] | None = None
     acks: dict[int, tuple[bool, str | None, str | None]] = field(default_factory=dict)
     input_device: str = "touch"
+    camera_curve: Callable[[int], float] | None = None
+    camera_bad_days: dict[int, float] = field(default_factory=dict)
+    camera_skip_prob: float = 0.12
 
     def active(self, k: int) -> bool:
         if k < self.from_k:
@@ -123,7 +143,24 @@ class Story:
         next_missed = rng_for(self.id, k + 1, "skip").random() < self.skip_prob
         return not (missed and not prev_missed and not next_missed)
 
-    def plan(self, k: int) -> tuple[dict[str, int], dict[int, float]] | None:
+    def camera_plan(self, k: int) -> dict[int, float]:
+        if self.camera_curve is None:
+            return {}
+        base = self.camera_curve(k) + self.camera_bad_days.get(k, 0.0)
+        result: dict[int, float] = {}
+        for level in LEVELS:
+            if (
+                level in CAMERA_OPTIONAL
+                and rng_for(self.id, k, f"camskip{level}").random() < self.camera_skip_prob
+            ):
+                continue
+            score_noise = rng_for(self.id, k, f"cam{level}").gauss(0, 1.5)
+            result[level] = round(
+                _clip(base + CAMERA_LEVEL_OFFSET[level] + score_noise, 4.0, 100.0), 1
+            )
+        return result
+
+    def plan(self, k: int) -> tuple[dict[str, int], dict[int, float], dict[int, float]] | None:
         if not self.active(k):
             return None
         center = self.curve(k) + self.bad_days.get(k, 0.0)
@@ -141,7 +178,7 @@ class Story:
             )
             for level in LEVELS
         }
-        return self.rating_plan(k, rng_for(self.id, k, "ratings")), scores
+        return self.rating_plan(k, rng_for(self.id, k, "ratings")), scores, self.camera_plan(k)
 
 
 STORIES = [
@@ -154,6 +191,15 @@ STORIES = [
         noise=2.0,
         reliable_from=30,
         input_device="mouse",
+        camera_curve=_p2_camera,
+        camera_bad_days=P2_CAMERA_DIP,
+        acks={
+            21: (
+                True,
+                "false_alarm",
+                "Pregled meritev je pokazal lažni alarm pri vajah s kamero.",
+            ),
+        },
     ),
     Story(
         "p3",
@@ -164,8 +210,9 @@ STORIES = [
         reliable_from=21,
         level_offsets={1: 2.0, 2: 0.0, 3: -2.0},
         input_device="mouse",
+        camera_curve=_p3_camera,
     ),
-    Story("p4", 35, _p4_curve, _rt_p4, noise=2.0, reliable_from=24),
+    Story("p4", 35, _p4_curve, _rt_p4, noise=2.0, reliable_from=24, camera_curve=_p4_camera),
     Story(
         "p5",
         28,

@@ -84,6 +84,8 @@ def ingest_game_session(
     day: date | None = None,
     preset_score: float | None = None,
     preset_features: dict[str, float] | None = None,
+    preset_model_version: str = "standin-0.1",
+    preset_quality_ok: bool | None = None,
 ) -> tuple[GameSession, bool]:
     """Store one game result and, when completed, its score and trend snapshots."""
     if session.get(Patient, patient_id) is None:
@@ -102,7 +104,8 @@ def ingest_game_session(
                 "score": preset_score,
                 "impairment_class": impairment_class(preset_score),
                 "features": preset_features or {},
-                "model_version": "standin-0.1",
+                "model_version": preset_model_version,
+                "quality_ok": preset_quality_ok,
             }
         else:
             score_result = score_session(game_type, level, hand, duration_ms, series, client_meta)
