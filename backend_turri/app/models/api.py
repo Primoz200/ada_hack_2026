@@ -45,9 +45,10 @@ class QuestionOut(ApiModel):
 
 
 class PathwayGameOut(ApiModel):
-    game_type: Literal["trace", "camera_tapping", "camera_reach", "motion"]
+    game_type: Literal["trace", "camera"]
     title: str
     levels: list[int]
+    optional_levels: list[int] = Field(default_factory=list)
 
 
 class PathwayOut(ApiModel):
@@ -101,6 +102,7 @@ class PatientListItem(ApiModel):
     reason: str
     diverging: bool
     game_sparkline: list[SparkPoint]
+    camera_sparkline: list[SparkPoint]
     wellbeing_sparkline: list[SparkPoint]
     days_to_next_visit: int | None
     open_alert_id: int | None
@@ -128,6 +130,8 @@ class PatientHomeStep(ApiModel):
     game_type: str | None
     level: int | None
     done: bool
+    skippable: bool = False
+    duration_s: float | None = None
 
 
 class PatientHomeOut(ApiModel):
@@ -161,6 +165,19 @@ class PatientRatingPoint(ApiModel):
     pain: float | None
 
 
+class GameProgress(ApiModel):
+    game_type: Literal["trace", "camera"]
+    title: str
+    trend: Literal["unknown", "stable", "improving", "declining"]
+    points: list[FeedbackPoint]
+    personal_best_day: date | None
+
+
+class SelfcheckGamePoints(ApiModel):
+    game_type: Literal["trace", "camera"]
+    points: list[FeedbackPoint]
+
+
 class SelfcheckSummaryOut(ApiModel):
     tone: Literal["first", "better", "similar", "lower"]
     trend: Literal["unknown", "stable", "improving", "declining"]
@@ -170,7 +187,7 @@ class SelfcheckSummaryOut(ApiModel):
     day: date
     levels_done: int
     levels_total: int
-    points: list[FeedbackPoint]
+    games: list[SelfcheckGamePoints]
 
 
 class PatientProgressOut(ApiModel):
@@ -179,9 +196,8 @@ class PatientProgressOut(ApiModel):
     title: str
     text: str
     patient_id: str
-    points: list[FeedbackPoint]
+    games: list[GameProgress]
     ratings: list[PatientRatingPoint]
-    personal_best_day: date | None
     week_done: int
     week_goal: int
     clinician_reviewed_at: datetime | None
@@ -216,7 +232,7 @@ class PatientDetail(ApiModel):
 
 class SessionSummary(ApiModel):
     id: int
-    game_type: Literal["trace", "camera_tapping", "camera_reach", "motion"]
+    game_type: Literal["trace", "camera"]
     level: int
     hand: Literal["left", "right"]
     day: date
@@ -230,6 +246,7 @@ class SessionSummary(ApiModel):
     model_version: str | None
     features: dict[str, float]
     counts_for_trend: bool
+    quality_ok: bool | None = None
 
 
 class TrendPoint(ApiModel):
@@ -306,6 +323,13 @@ class CheckinResult(ApiModel):
 
 
 class ClientMetaIn(ApiModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        from_attributes=True,
+        extra="allow",
+    )
+
     input_device: Literal["touch", "mouse", "camera"]
     canvas_w: float
     canvas_h: float
@@ -315,14 +339,14 @@ class ClientMetaIn(ApiModel):
 
 class SessionIn(ApiModel):
     patient_id: str
-    game_type: Literal["trace", "camera_tapping", "camera_reach", "motion"]
+    game_type: Literal["trace", "camera"]
     level: int
     hand: Literal["left", "right"]
     started_at: datetime
     duration_ms: int = Field(ge=0, strict=True)
     completed: bool
     abort_reason: str | None = None
-    series: dict[str, list[float]]
+    series: dict[str, list[float | None]]
     client_meta: ClientMetaIn
 
 
@@ -334,9 +358,23 @@ class SessionResult(ApiModel):
 class SessionRawOut(ApiModel):
     session_id: int
     patient_id: str
-    game_type: Literal["trace", "camera_tapping", "camera_reach", "motion"]
+    game_type: Literal["trace", "camera"]
     level: int
     day: date
     score: float | None
-    series: dict[str, list[float]]
+    series: dict[str, list[float | None]]
     client_meta: dict[str, Any]
+
+
+class CameraExerciseOut(ApiModel):
+    level: int
+    key: str
+    name: str
+    detector: Literal["hand", "pose"]
+    duration_s: float
+    first_cue_s: float
+    cue_period_s: float
+    n_cues: int
+    up_s: float | None = None
+    open_window_s: float | None = None
+    instructions: str

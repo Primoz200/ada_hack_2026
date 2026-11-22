@@ -15,6 +15,7 @@ from sqlmodel import Session
 from app.db import engine
 from app.routers.admin import router as admin_router
 from app.routers.alerts import router as alerts_router
+from app.routers.camera import router as camera_router
 from app.routers.checkins import router as checkins_router
 from app.routers.pathways import router as pathways_router
 from app.routers.patients import router as patients_router
@@ -36,6 +37,7 @@ app = FastAPI(title="Rehabilitation Monitoring API", lifespan=lifespan)
 app.include_router(admin_router)
 app.include_router(alerts_router)
 app.include_router(checkins_router)
+app.include_router(camera_router)
 app.include_router(pathways_router)
 app.include_router(patients_router)
 app.include_router(sessions_router)

@@ -58,13 +58,14 @@ class GameSession(SQLModel, table=True):
     model_version: str | None = None
     features: dict[str, float] = Field(default_factory=dict, sa_column=Column(JSON))
     counts_for_trend: bool = False
+    quality_ok: bool | None = None
 
 
 class GameSessionRaw(SQLModel, table=True):
     """Raw series and client metadata, keyed by the associated game session."""
 
     session_id: int = Field(foreign_key="gamesession.id", primary_key=True)
-    series: dict[str, list[float]] = Field(default_factory=dict, sa_column=Column(JSON))
+    series: dict[str, list[float | None]] = Field(default_factory=dict, sa_column=Column(JSON))
     client_meta: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
 

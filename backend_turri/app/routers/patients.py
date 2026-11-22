@@ -11,6 +11,7 @@ from app.db import get_session
 from app.models.api import (
     AlertOut,
     CheckinOut,
+    GameProgress,
     PathwayOut,
     PatientDetail,
     PatientHomeOut,
@@ -20,6 +21,7 @@ from app.models.api import (
     PatientProgressOut,
     PatientRatingPoint,
     PatientSummary,
+    SelfcheckGamePoints,
     SelfcheckSummaryOut,
     SessionSummary,
     SparkPoint,
@@ -31,6 +33,7 @@ from app.models.tables import Alert, Checkin, GameSession, Pathway, Patient, Tre
 from app.services.alerts import divergence, sweep_missing_data_alerts
 from app.services.clock import today
 from app.services.feedback import feedback_points, patient_feedback
+from app.services.scoring import camera_exercises
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
 NO_DATA_DAYS = 4
@@ -39,6 +42,8 @@ WEEK_GOAL = 5
 RECENT_PROGRESS_DAYS = 7
 SELF_CHECK_POINTS_DAYS = 14
 TRACE_LEVEL_TITLES = {1: "Ravna črta", 2: "Krog", 3: "Labirint"}
+CAMERA_LEVEL_TITLES = {1: "Dlan", 2: "Roke v stran", 3: "Dvig rok"}
+GAME_TITLES = {"trace": "Sledenje", "camera": "Vaje s kamero"}
 
 
 def _open_alert(session: Session, patient_id: str) -> Alert | None:
@@ -136,35 +141,39 @@ def _triage(
     return "stable", reason, diverging_now, None, latest
 
 
-def _sparkline_data(session: Session, patient_id: str) -> tuple[list[SparkPoint], list[SparkPoint]]:
-    game_rows = session.exec(
-        select(TrendSnapshot)
-        .where(
-            column("patient_id") == patient_id,
-            column("metric") == "trace:all",
-            column("delta").is_not(None),
-        )
-        .order_by(column("day").desc(), column("id").desc())
-        .limit(21)
-    ).all()
+def _sparkline_data(
+    session: Session, patient_id: str
+) -> tuple[list[SparkPoint], list[SparkPoint], list[SparkPoint]]:
+    def trend_points(game_type: str) -> list[SparkPoint]:
+        rows = session.exec(
+            select(TrendSnapshot)
+            .where(
+                column("patient_id") == patient_id,
+                column("metric") == f"{game_type}:all",
+                column("delta").is_not(None),
+            )
+            .order_by(column("day").desc(), column("id").desc())
+            .limit(21)
+        ).all()
+        return [SparkPoint(day=row.day, value=row.delta) for row in reversed(rows)]
+
     checkins = session.exec(
         select(Checkin)
         .where(column("patient_id") == patient_id)
         .order_by(column("day").desc(), column("id").desc())
         .limit(21)
     ).all()
-    game = [SparkPoint(day=row.day, value=row.delta) for row in reversed(game_rows)]
     wellbeing = [
         SparkPoint(day=row.day, value=row.answers.get("wellbeing")) for row in reversed(checkins)
     ]
-    return game, wellbeing
+    return trend_points("trace"), trend_points("camera"), wellbeing
 
 
 def _patient_list_item(
     session: Session, patient: Patient, pathway_name: str, as_of: date
 ) -> PatientListItem:
     status, reason, diverging_now, alert, _ = _triage(session, patient, as_of)
-    game_sparkline, wellbeing_sparkline = _sparkline_data(session, patient.id)
+    game_sparkline, camera_sparkline, wellbeing_sparkline = _sparkline_data(session, patient.id)
     return PatientListItem(
         id=patient.id,
         name=patient.name,
@@ -176,6 +185,7 @@ def _patient_list_item(
         reason=reason,
         diverging=diverging_now,
         game_sparkline=game_sparkline,
+        camera_sparkline=camera_sparkline,
         wellbeing_sparkline=wellbeing_sparkline,
         days_to_next_visit=(patient.next_visit_date - as_of).days
         if patient.next_visit_date is not None
@@ -248,6 +258,7 @@ def _patient_game_steps(
     ).all()
     completed_pairs = set(completed)
     steps: list[PatientHomeStep] = []
+    exercise_by_level = {int(row["level"]): row for row in camera_exercises()}
     for game in pathway.games:
         game_type = str(game.get("gameType", ""))
         for raw_level in game.get("levels", []):
@@ -256,12 +267,20 @@ def _patient_game_steps(
                 PatientHomeStep(
                     id=f"{game_type}:{level}",
                     kind="game",
-                    title=TRACE_LEVEL_TITLES.get(level, f"Stopnja {level}")
-                    if game_type == "trace"
-                    else f"Stopnja {level}",
+                    title=(
+                        TRACE_LEVEL_TITLES.get(level, f"Stopnja {level}")
+                        if game_type == "trace"
+                        else CAMERA_LEVEL_TITLES.get(level, f"Stopnja {level}")
+                    ),
                     game_type=game_type,
                     level=level,
                     done=(game_type, level) in completed_pairs,
+                    skippable=level in game.get("optionalLevels", []),
+                    duration_s=(
+                        exercise_by_level.get(level, {}).get("duration_s")
+                        if game_type == "camera"
+                        else None
+                    ),
                 )
             )
     return steps
@@ -326,9 +345,51 @@ def get_patient_home(
         hand=cast(Literal["left", "right"], patient.side),
         today=as_of,
         steps=steps,
-        selfcheck_done_today=all(step.done for step in steps),
+        selfcheck_done_today=all(step.done for step in steps if step.game_type != "camera"),
         last_selfcheck_day=_last_entry_day(session, patient.id, as_of),
     )
+
+
+def _game_types_with_data(session: Session, patient_id: str, as_of: date) -> list[str]:
+    available = {
+        row.metric.split(":", 1)[0]
+        for row in session.exec(
+            select(TrendSnapshot).where(
+                column("patient_id") == patient_id,
+                column("day") <= as_of,
+                column("delta").is_not(None),
+            )
+        ).all()
+        if row.metric.endswith(":all")
+    }
+    return [game_type for game_type in ("trace", "camera") if game_type in available]
+
+
+def _best_day(session: Session, patient_id: str, as_of: date, game_type: str) -> date | None:
+    best = session.exec(
+        select(TrendSnapshot)
+        .where(
+            column("patient_id") == patient_id,
+            column("metric") == f"{game_type}:all",
+            column("day") <= as_of,
+            column("delta").is_not(None),
+        )
+        .order_by(column("delta").desc(), column("day").desc(), column("id").desc())
+    ).first()
+    return best.day if best is not None else None
+
+
+def _game_progress(session: Session, patient_id: str, as_of: date) -> list[GameProgress]:
+    return [
+        GameProgress(
+            game_type=game_type,
+            title=GAME_TITLES[game_type],
+            trend=patient_feedback(session, patient_id, as_of, game_type).trend,
+            points=feedback_points(session, patient_id, as_of, game_type=game_type),
+            personal_best_day=_best_day(session, patient_id, as_of, game_type),
+        )
+        for game_type in _game_types_with_data(session, patient_id, as_of)
+    ]
 
 
 def _selfcheck_summary(
@@ -337,6 +398,19 @@ def _selfcheck_summary(
     steps = _patient_game_steps(session, patient_id, pathway, as_of)
     done_today = sum(step.done for step in steps)
     total_steps = sum(len(game.get("levels", [])) for game in pathway.games)
+    game_points = [
+        SelfcheckGamePoints(
+            game_type=game_type,
+            points=feedback_points(
+                session,
+                patient_id,
+                as_of,
+                since=as_of - timedelta(days=13),
+                game_type=game_type,
+            ),
+        )
+        for game_type in _game_types_with_data(session, patient_id, as_of)
+    ]
     feedback = patient_feedback(session, patient_id, as_of)
     return SelfcheckSummaryOut(
         tone=feedback.tone,
@@ -347,7 +421,7 @@ def _selfcheck_summary(
         day=as_of,
         levels_done=done_today,
         levels_total=total_steps,
-        points=feedback_points(session, patient_id, as_of, since=as_of - timedelta(days=13)),
+        games=game_points,
     )
 
 
@@ -376,7 +450,7 @@ def get_patient_progress(
     """Return the patient's all-time game and rating progress."""
     _require_patient(session, patient_id)
     as_of = today()
-    snapshots = feedback_points(session, patient_id, as_of)
+    game_progress = _game_progress(session, patient_id, as_of)
     ratings = session.exec(
         select(Checkin)
         .where(column("patient_id") == patient_id, column("day") <= as_of)
@@ -402,16 +476,6 @@ def get_patient_progress(
         .where(column("patient_id") == patient_id, column("acknowledged_at").is_not(None))
         .order_by(column("acknowledged_at").desc())
     ).first()
-    best_snapshot = session.exec(
-        select(TrendSnapshot)
-        .where(
-            column("patient_id") == patient_id,
-            column("metric") == "trace:all",
-            column("day") <= as_of,
-            column("delta").is_not(None),
-        )
-        .order_by(column("delta").desc(), column("day").desc(), column("id").desc())
-    ).first()
     feedback = patient_feedback(session, patient_id, as_of)
     return PatientProgressOut(
         tone=feedback.tone,
@@ -419,7 +483,7 @@ def get_patient_progress(
         title=feedback.title,
         text=feedback.text,
         patient_id=patient_id,
-        points=snapshots,
+        games=game_progress,
         ratings=[
             PatientRatingPoint(
                 day=row.day,
@@ -428,7 +492,6 @@ def get_patient_progress(
             )
             for row in ratings
         ],
-        personal_best_day=best_snapshot.day if best_snapshot is not None else None,
         week_done=len({row.day for row in checkin_days} | {row.day for row in session_days}),
         week_goal=WEEK_GOAL,
         clinician_reviewed_at=acknowledged.acknowledged_at if acknowledged is not None else None,

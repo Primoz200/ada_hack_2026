@@ -16,7 +16,20 @@ def test_pathways_include_game_and_rating_configuration(client: TestClient) -> N
             "code": "ctr",
             "name": "Operacija karpalnega kanala",
             "frequency": "vsak dan",
-            "games": [{"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3]}],
+            "games": [
+                {
+                    "gameType": "trace",
+                    "title": "Sledi poti",
+                    "levels": [1, 2, 3],
+                    "optionalLevels": [],
+                },
+                {
+                    "gameType": "camera",
+                    "title": "Vaje s kamero",
+                    "levels": [1, 2, 3],
+                    "optionalLevels": [2, 3],
+                },
+            ],
             "questions": [
                 {
                     "id": "wellbeing",
@@ -46,7 +59,20 @@ def test_pathways_include_game_and_rating_configuration(client: TestClient) -> N
             "code": "stroke",
             "name": "Možganska kap",
             "frequency": "vsak dan",
-            "games": [{"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3]}],
+            "games": [
+                {
+                    "gameType": "trace",
+                    "title": "Sledi poti",
+                    "levels": [1, 2, 3],
+                    "optionalLevels": [],
+                },
+                {
+                    "gameType": "camera",
+                    "title": "Vaje s kamero",
+                    "levels": [1, 2, 3],
+                    "optionalLevels": [2, 3],
+                },
+            ],
             "questions": [
                 {
                     "id": "wellbeing",

@@ -79,7 +79,7 @@ def ingest_game_session(
     duration_ms: int,
     completed: bool,
     abort_reason: str | None,
-    series: dict[str, list[float]],
+    series: dict[str, list[float | None]],
     client_meta: dict[str, Any],
     day: date | None = None,
     preset_score: float | None = None,
@@ -117,13 +117,22 @@ def ingest_game_session(
         completed=completed,
         abort_reason=abort_reason,
         input_device=str(client_meta["inputDevice"]),
-        score=float(score_result["score"]) if score_result is not None else None,
-        impairment_class=str(score_result["impairment_class"])
-        if score_result is not None
+        score=float(score_result["score"])
+        if score_result is not None and score_result.get("score") is not None
         else None,
+        impairment_class=(
+            str(score_result["impairment_class"])
+            if score_result is not None and score_result.get("impairment_class") is not None
+            else None
+        ),
         model_version=str(score_result["model_version"]) if score_result is not None else None,
         features=score_result["features"] if score_result is not None else {},
-        counts_for_trend=completed,
+        counts_for_trend=bool(
+            score_result is not None
+            and score_result.get("score") is not None
+            and score_result.get("quality_ok") is not False
+        ),
+        quality_ok=score_result.get("quality_ok") if score_result is not None else None,
     )
     session.add(game_session)
     session.flush()
@@ -136,10 +145,10 @@ def ingest_game_session(
             client_meta=client_meta,
         )
     )
-    if completed:
+    if game_session.counts_for_trend:
         recompute_trend_snapshots(session, patient_id, game_type, game_session.day)
     else:
         session.commit()
     session.refresh(game_session)
     evaluate_alerts(session, patient_id, game_session.day)
-    return game_session, completed
+    return game_session, game_session.counts_for_trend

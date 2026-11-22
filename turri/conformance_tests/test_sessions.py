@@ -13,11 +13,15 @@ def reset_demo(api: httpx.Client) -> None:
 
 
 def session_payload(
-    *, completed: bool, abort_reason: str | None = None, level: int = 1
+    *,
+    completed: bool,
+    abort_reason: str | None = None,
+    level: int = 1,
+    game_type: str = "trace",
 ) -> dict[str, object]:
     return {
         "patientId": "p9",
-        "gameType": "trace",
+        "gameType": game_type,
         "level": level,
         "hand": "right",
         "startedAt": "2026-11-21T10:00:00Z",
@@ -105,6 +109,15 @@ def test_unknown_trace_level(api: httpx.Client) -> None:
     response = api.post("/api/sessions", json=session_payload(completed=True, level=4))
     assert response.status_code == 422, (
         f"Expected HTTP 422 for unknown trace level, got {response.status_code}"
+    )
+
+
+# acceptance scenario unknown-camera-level of backend:sessions
+def test_unknown_camera_level(api: httpx.Client) -> None:
+    payload = session_payload(completed=True, level=4, game_type="camera")
+    response = api.post("/api/sessions", json=payload)
+    assert response.status_code == 422, (
+        f"Expected HTTP 422 for unknown camera level, got {response.status_code}"
     )
 
 

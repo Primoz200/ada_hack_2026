@@ -21,8 +21,8 @@ def test_meta_today_and_defaults(api: httpx.Client) -> None:
     assert meta["defaultPatientId"] == "p3", (
         f"Expected default patient p3, got {meta.get('defaultPatientId')!r}"
     )
-    assert meta["modelVersion"] == "standin-0.1", (
-        f"Expected stand-in model version, got {meta.get('modelVersion')!r}"
+    assert meta["modelVersion"] == "tracer-gbm-0.1", (
+        f"Expected tracer model version, got {meta.get('modelVersion')!r}"
     )
     clinicians = meta["clinicians"]
     assert len(clinicians) == 1 and clinicians[0]["id"] == "c1", (
@@ -52,12 +52,21 @@ def test_two_pathways(api: httpx.Client) -> None:
         f"Expected stroke and ctr pathways, got {pathways!r}"
     )
     for pathway in pathways:
-        assert len(pathway["games"]) == 1, (
-            f"Expected one game for {pathway['code']}, got {pathway['games']!r}"
+        assert len(pathway["games"]) == 2, (
+            f"Expected trace and camera games for {pathway['code']}, got {pathway['games']!r}"
         )
-        game = pathway["games"][0]
-        assert game["gameType"] == "trace" and game["levels"] == [1, 2, 3], (
-            f"Expected trace levels [1, 2, 3] for {pathway['code']}, got {game!r}"
+        trace, camera = pathway["games"]
+        assert trace["gameType"] == "trace" and trace["levels"] == [1, 2, 3], (
+            f"Expected trace levels [1, 2, 3] for {pathway['code']}, got {trace!r}"
+        )
+        assert trace["optionalLevels"] == [], (
+            f"Expected no optional trace levels for {pathway['code']}, got {trace!r}"
+        )
+        assert camera["gameType"] == "camera" and camera["levels"] == [1, 2, 3], (
+            f"Expected camera levels [1, 2, 3] for {pathway['code']}, got {camera!r}"
+        )
+        assert camera["optionalLevels"] == [2, 3], (
+            f"Expected optional camera levels [2, 3] for {pathway['code']}, got {camera!r}"
         )
         question_ids = {question["id"] for question in pathway["questions"]}
         assert question_ids == {"wellbeing", "pain"}, (

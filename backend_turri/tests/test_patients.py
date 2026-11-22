@@ -212,39 +212,39 @@ def test_patient_home_builds_daily_steps_and_last_entry(client: TestClient) -> N
     assert result["patientId"] == "home-test"
     assert result["selfcheckDoneToday"] is False
     assert result["lastSelfcheckDay"] == "2026-11-21"
-    assert result["steps"] == [
-        {
-            "id": "ratings",
-            "kind": "ratings",
-            "title": "Počutje in bolečina",
-            "gameType": None,
-            "level": None,
-            "done": True,
-        },
-        {
-            "id": "trace:1",
-            "kind": "game",
-            "title": "Ravna črta",
-            "gameType": "trace",
-            "level": 1,
-            "done": True,
-        },
-        {
-            "id": "trace:2",
-            "kind": "game",
-            "title": "Krog",
-            "gameType": "trace",
-            "level": 2,
-            "done": False,
-        },
-        {
-            "id": "trace:3",
-            "kind": "game",
-            "title": "Labirint",
-            "gameType": "trace",
-            "level": 3,
-            "done": False,
-        },
+    assert [step["id"] for step in result["steps"]] == [
+        "ratings",
+        "trace:1",
+        "trace:2",
+        "trace:3",
+        "camera:1",
+        "camera:2",
+        "camera:3",
+    ]
+    assert result["steps"][0] == {
+        "id": "ratings",
+        "kind": "ratings",
+        "title": "Počutje in bolečina",
+        "gameType": None,
+        "level": None,
+        "done": True,
+        "skippable": False,
+        "durationS": None,
+    }
+    assert result["steps"][1] == {
+        "id": "trace:1",
+        "kind": "game",
+        "title": "Ravna črta",
+        "gameType": "trace",
+        "level": 1,
+        "done": True,
+        "skippable": False,
+        "durationS": None,
+    }
+    assert [(step["id"], step["skippable"], step["durationS"]) for step in result["steps"][4:]] == [
+        ("camera:1", False, None),
+        ("camera:2", True, None),
+        ("camera:3", True, None),
     ]
 
 
@@ -276,11 +276,12 @@ def test_feedback_without_snapshots_uses_first_day_message(client: TestClient) -
         "day",
         "levelsDone",
         "levelsTotal",
-        "points",
+        "games",
     }
     assert feedback["patientId"] == "first-feedback"
     assert feedback["levelsDone"] == 0
-    assert feedback["levelsTotal"] == 3
+    assert feedback["levelsTotal"] == 6
+    assert feedback["games"] == []
     assert {key: feedback[key] for key in ("tone", "trend", "title", "text")} == {
         "tone": "first",
         "trend": "unknown",
@@ -375,14 +376,20 @@ def test_feedback_and_selfcheck_summary_use_points_and_open_game_alert(client: T
         "day",
         "levelsDone",
         "levelsTotal",
-        "points",
+        "games",
     }
     assert result["patientId"] == "feedback-test"
     assert result["day"] == "2026-11-21"
     assert result["levelsDone"] == 0
-    assert result["levelsTotal"] == 3
-    assert len(result["points"]) == 6
-    assert result["points"][-1] == {"day": "2026-11-21", "value": -4.0, "label": "usual"}
+    assert result["levelsTotal"] == 6
+    assert len(result["games"]) == 1
+    assert result["games"][0]["gameType"] == "trace"
+    assert len(result["games"][0]["points"]) == 6
+    assert result["games"][0]["points"][-1] == {
+        "day": "2026-11-21",
+        "value": -4.0,
+        "label": "usual",
+    }
     assert {key: result[key] for key in ("tone", "trend", "title", "text")} == {
         "tone": "better",
         "trend": "declining",
@@ -408,21 +415,22 @@ def test_patient_progress_returns_all_history_and_tie_breaks_best_day_late(
         "title",
         "text",
         "patientId",
-        "points",
+        "games",
         "ratings",
-        "personalBestDay",
         "weekDone",
         "weekGoal",
         "clinicianReviewedAt",
     }
     assert result["patientId"] == "feedback-test"
-    assert len(result["points"]) == 6
-    assert result["points"][-1]["value"] == -4.0
+    assert len(result["games"]) == 1
+    assert result["games"][0]["gameType"] == "trace"
+    assert len(result["games"][0]["points"]) == 6
+    assert result["games"][0]["points"][-1]["value"] == -4.0
+    assert result["games"][0]["personalBestDay"] == "2026-11-21"
     assert result["ratings"] == [
         {"day": "2026-11-19", "wellbeing": 8.0, "pain": 1.0},
         {"day": "2026-11-21", "wellbeing": 7.0, "pain": 2.0},
     ]
-    assert result["personalBestDay"] == "2026-11-21"
     assert result["weekDone"] == 3
     assert result["weekGoal"] == 5
     assert result["clinicianReviewedAt"] == "2026-11-21T08:00:00Z"

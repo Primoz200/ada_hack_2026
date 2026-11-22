@@ -122,12 +122,20 @@ def test_model_version_tracks_external_load_and_last_scoring_failure(
     assert scoring.active_model_version() == "standin-0.1"
 
 
-def test_other_game_uses_standin_placeholder() -> None:
-    result = scoring.score_session("motion", 8, "right", 2_000, {}, {})
+def test_trace_standin_null_coordinate_is_unscorable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(scoring, "_load_external_scorer", lambda: None)
+    result = scoring.score_session(
+        "trace",
+        1,
+        "right",
+        2_000,
+        {"targetX": [0.0, 1.0], "targetY": [0.0, 0.0], "x": [None], "y": [0.0]},
+        {},
+    )
 
     assert result == {
-        "score": 50.0,
-        "impairment_class": "moderate",
+        "score": None,
+        "impairment_class": None,
         "features": {},
         "model_version": "standin-0.1",
     }

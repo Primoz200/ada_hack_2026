@@ -8,7 +8,7 @@ from sqlmodel import Session
 
 from app.db import get_session
 from app.models.api import SessionIn, SessionRawOut, SessionResult
-from app.models.tables import GameSession, GameSessionRaw
+from app.models.tables import GameSession, GameSessionRaw, Pathway, Patient
 from app.services.ingest import PatientNotFoundError, ingest_game_session
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,19 @@ def create_session(
     session: Annotated[Session, Depends(get_session)],
 ) -> SessionResult:
     """Store a game result and score completed sessions."""
-    if payload.game_type == "trace" and payload.level not in {1, 2, 3}:
-        raise HTTPException(status_code=422, detail="Neznana stopnja igre")
+    patient = session.get(Patient, payload.patient_id)
+    if patient is not None:
+        pathway = session.get(Pathway, patient.pathway_code)
+        game = (
+            next(
+                (item for item in pathway.games if item.get("gameType") == payload.game_type),
+                None,
+            )
+            if pathway is not None
+            else None
+        )
+        if game is None or payload.level not in game.get("levels", []):
+            raise HTTPException(status_code=422, detail="Neznana stopnja igre")
     try:
         stored, scored = ingest_game_session(
             session,

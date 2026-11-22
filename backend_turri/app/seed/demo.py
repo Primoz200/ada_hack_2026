@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, date, datetime, time, timedelta
+from typing import cast
 
 from sqlalchemy import column
 from sqlmodel import Session, select
@@ -22,7 +23,13 @@ PATHWAY_ROWS: tuple[tuple[str, str], ...] = (
 )
 
 GAME_ROWS: list[dict[str, object]] = [
-    {"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3]}
+    {"gameType": "trace", "title": "Sledi poti", "levels": [1, 2, 3], "optionalLevels": []},
+    {
+        "gameType": "camera",
+        "title": "Vaje s kamero",
+        "levels": [1, 2, 3],
+        "optionalLevels": [2, 3],
+    },
 ]
 QUESTION_ROWS: list[dict[str, object]] = [
     {
@@ -203,7 +210,7 @@ def replay_demo_history(session: Session, today: date) -> None:
                         duration_ms=duration_ms,
                         completed=True,
                         abort_reason=None,
-                        series=series,
+                        series=cast(dict[str, list[float | None]], series),
                         client_meta=client_meta,
                         day=replay_day,
                         preset_score=scores[level],

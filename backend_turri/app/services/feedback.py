@@ -47,14 +47,16 @@ def _load_messages() -> dict[tuple[str, str], tuple[str, str]]:
 FEEDBACK_MESSAGES = _load_messages()
 
 
-def _snapshots(session: Session, patient_id: str, as_of: date) -> list[TrendSnapshot]:
-    """Load scored trace combined deltas from oldest to newest through the given day."""
+def _snapshots(
+    session: Session, patient_id: str, as_of: date, game_type: str = "trace"
+) -> list[TrendSnapshot]:
+    """Load combined deltas for one game's history from oldest to newest."""
     return list(
         session.exec(
             select(TrendSnapshot)
             .where(
                 column("patient_id") == patient_id,
-                column("metric") == "trace:all",
+                column("metric") == f"{game_type}:all",
                 column("day") <= as_of,
                 column("delta").is_not(None),
             )
@@ -63,7 +65,7 @@ def _snapshots(session: Session, patient_id: str, as_of: date) -> list[TrendSnap
     )
 
 
-def _has_open_game_alert(session: Session, patient_id: str) -> bool:
+def _has_open_game_alert(session: Session, patient_id: str, game_type: str = "trace") -> bool:
     alerts = session.exec(
         select(Alert).where(
             column("patient_id") == patient_id,
@@ -72,18 +74,22 @@ def _has_open_game_alert(session: Session, patient_id: str) -> bool:
         )
     ).all()
     return any(
-        alert.rule in GAME_ALERT_RULES
+        (alert.rule in GAME_ALERT_RULES and game_type == "trace")
         or any(
-            isinstance(trigger, dict) and trigger.get("rule") in GAME_ALERT_RULES
+            isinstance(trigger, dict)
+            and trigger.get("rule") in GAME_ALERT_RULES
+            and trigger.get("gameType", "trace") == game_type
             for trigger in alert.evidence.get("triggers", [])
         )
         for alert in alerts
     )
 
 
-def patient_feedback(session: Session, patient_id: str, as_of: date) -> FeedbackOut:
+def patient_feedback(
+    session: Session, patient_id: str, as_of: date, game_type: str = "trace"
+) -> FeedbackOut:
     """Return text-only trend feedback as of a date, without exposing a score."""
-    snapshots = _snapshots(session, patient_id, as_of)
+    snapshots = _snapshots(session, patient_id, as_of, game_type)
     tone: Literal["first", "better", "similar", "lower"]
     trend: Literal["unknown", "stable", "improving", "declining"]
     if not snapshots:
@@ -99,7 +105,7 @@ def patient_feedback(session: Session, patient_id: str, as_of: date) -> Feedback
         else:
             tone = "similar"
 
-        if _has_open_game_alert(session, patient_id):
+        if _has_open_game_alert(session, patient_id, game_type):
             trend = "declining"
         else:
             comparison_index = max(0, len(deltas) - 1 - TREND_SESSION_DAY_LOOKBACK)
@@ -119,10 +125,15 @@ def patient_feedback(session: Session, patient_id: str, as_of: date) -> Feedback
 
 
 def feedback_points(
-    session: Session, patient_id: str, as_of: date, *, since: date | None = None
+    session: Session,
+    patient_id: str,
+    as_of: date,
+    *,
+    since: date | None = None,
+    game_type: str = "trace",
 ) -> list[FeedbackPoint]:
     """Return numeric trend points for charts, rounded and labelled for the patient."""
-    snapshots = _snapshots(session, patient_id, as_of)
+    snapshots = _snapshots(session, patient_id, as_of, game_type)
     points: list[FeedbackPoint] = []
     for row in snapshots:
         if since is not None and row.day < since:
