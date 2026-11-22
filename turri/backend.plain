@@ -66,6 +66,8 @@ import:
 
 - :StandinVersion: is the model version string `standin-0.1`.
 
+- :CameraSeed: is the code that gives a seeded camera session plausible features for its score, given in [the camera seed](resources/seed_camera.py).
+
 - :DemoStory: is one of the ten synthetic patient histories the demo is seeded with, given as data and pure functions in [the demo stories](resources/seed_stories.py).
 
 ***implementation reqs***
@@ -101,10 +103,11 @@ import:
   - A failure to import them is logged once and leaves the camera exercises unavailable; the backend and the tracing game keep working.
 - :Implementation: keeps every client meta key of a session, also ones the :Api: does not name (camera sessions send `videoW`, `videoH`, `fpsMeasured`, `detector` and more), passes them to the :Scorer: and stores them with the raw series.
 - :Implementation: keeps a copy of [the tracer levels](resources/tracer_levels.json) as `app/seed/tracer_levels.json` and reads the level paths from it.
-- :Implementation: ships [the demo stories](resources/seed_stories.py) and [the camera seed](resources/seed_camera.py) as unchanged files in `resources/` at the root of the code, next to the copy of the API contract, and never rewrites them.
+- :Implementation: ships the file of the :DemoStory: stories and the file of the :CameraSeed: as byte-for-byte copies in `resources/seed_stories.py` and `resources/seed_camera.py` at the root of the code, next to the copy of the API contract, and never rewrites them.
   - `pyproject.toml` excludes `resources/` from ruff (`extend-exclude`) and from mypy (`exclude`).
   - `app/seed/stories.py` and `app/seed/camera.py` load those two files by path with `importlib.util.spec_from_file_location` and re-export their names (`STORIES`, `BY_ID`, `LEVELS`, `rng_for`, `CLINICIAN_ID`, `features`, `SEED_VERSION`, `DURATION_MS`, ...), so the demo data is exactly the resource.
   - The camera seed imports `scoring` from `app.services`, so `app.services.scoring` provides `camera_duration_s(level)`: the :CameraExercise:'s `duration_s`, or null when unavailable.
+  - A unit test checks the SHA-256 of the two copies: `resources/seed_stories.py` is `6535488d3260931bcd9e05d096c46c8b688dccdc074e0f3740a7f3ebdcf4713b` and `resources/seed_camera.py` is `b40ff909780bbb1eba0ee2145786c97a6fe906b6fc4241e56f327c5d28282d48`; any other content is wrong.
   - A unit test checks that `resources/seed_stories.py` defines the stories `p1` to `p9` and `demo`, with a camera curve for `p1`, `p2`, `p3`, `p4`, `p5`, `p6`, `p7` and `p9` and none for `p8` and `demo`.
 - :UnitTests: use FastAPI's `TestClient` and an in-memory SQLite engine per test, with `APP_KEEP_DB=1` and :Today: fixed to 2026-11-21.
 - :UnitTests: run with `APP_SEED_HISTORY=0`, except the tests of the history replay, which replay it once per test module and share that database.
@@ -251,5 +254,5 @@ Seeding the demo also replays each :DemoStory:'s history, day by day, from the d
 - A session's score is preset from the story (version :StandinVersion:, class by :ImpairmentClass:); its features are `level_features(level, score, rng_for(id, k, "feat<level>"))` and its trace `synthetic_trace(level, mean_dev * 1.4, duration_ms=int(duration_s * 1000), lifts=int(lifts), seed="<id>:<k>:<level>")` from [the trace generator](resources/seed_traces.py), with the stored features `dev_mean` (mean_dev / 0.06, 3 decimals), `duration_s`, `n_pauses` (round(pause_rate_hz x duration_s / 4)) and `n_lifts`.
 - The client meta is `touch` 360x360 at pixel ratio 3 or `mouse` 480x480 at pixel ratio 2, with user agent "seed (touch)" or "seed (mouse)", by the story's input device.
 - After the trace sessions of day k come the story's camera sessions, `plan.camera_scores` (level to score, from the story's `camera_plan(k)`; empty for a story without a camera), in level order: one completed camera session per level at hour h, minute 20 + 4 x level, with duration the :CameraExercise:'s `duration_s` x 1000 (30000 when unavailable) and an empty series, since nothing was recorded.
-  - Its score is preset from the story with model version `camera-seed`, class by :ImpairmentClass:, capture quality true, and the features of [the camera seed](resources/seed_camera.py): `features(level, score, rng_for(id, k, "camfeat<level>"))`.
+  - Its score is preset from the story with model version `camera-seed`, class by :ImpairmentClass:, capture quality true, and the features of the :CameraSeed:: `features(level, score, rng_for(id, k, "camfeat<level>"))`.
   - Its client meta is `camera` 1280x720 at pixel ratio 1, user agent "seed (camera)", plus `videoW` 1280, `videoH` 720 and `fpsMeasured` the features' `fps`.
