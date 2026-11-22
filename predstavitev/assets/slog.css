@@ -1,0 +1,267 @@
+/* Predstavitev »Okrevanje doma«. Barve in pisava so iz DESIGN.md.
+   Vsak diapozitiv je oder 1920 × 1080, ki se pomanjša na zaslon; na pokončnem telefonu je stran za branje. */
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-weight: 400 700;
+  font-display: block;
+  src: url("hanken-grotesk-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+2020, U+20A0-20AB;
+}
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-weight: 400 700;
+  font-display: block;
+  src: url("hanken-grotesk-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+2000-206F, U+20AC, U+2122, U+2212;
+}
+
+:root {
+  --ink: #1b2328;
+  --muted: #566772;
+  --page: #edf1f4;
+  --white: #fff;
+  --line: #d5dee5;
+  --slate: #3d6880;
+  --deep: #27475a;
+  --on-deep: #bdd0dc;
+  --green: #4c8f2f;
+  --green-ink: #3c7624;
+  --leaf: #a9d992;
+  --amber: #7a5200;
+  --amber-bg: #fff2d1;
+  --sun: #f2c45a;
+  --ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+* { box-sizing: border-box; margin: 0; }
+::selection { background: var(--leaf); color: var(--ink); }
+:focus-visible { outline: 3px solid currentColor; outline-offset: 5px; border-radius: 4px; }
+
+body {
+  font: 400 34px/1.4 "Hanken Grotesk", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--page);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-weight: 700; text-wrap: balance; }
+h2 { font-size: 92px; line-height: 1.04; letter-spacing: -.022em; }
+h3 { font-size: 36px; line-height: 1.2; }
+p { text-wrap: pretty; }
+ul { list-style: none; padding: 0; }
+svg, img { display: block; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Polja */
+.slide { --bg: var(--page); --fg: var(--ink); --sub: var(--muted); background: var(--bg); color: var(--fg); }
+.deep { --bg: var(--deep); --fg: var(--white); --sub: var(--on-deep); }
+.white { --bg: var(--white); }
+.green { --bg: var(--green-ink); --fg: var(--white); --sub: #e6f3df; }
+.slate { --bg: var(--slate); --fg: var(--white); --sub: #d3e2eb; }
+.amber { --bg: var(--sun); --sub: #4d3400; }
+.sub { color: var(--sub); }
+.note { color: var(--sub); font-size: 25px; line-height: 1.35; }
+
+/* Oder */
+.slide { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+.slide > * { position: absolute; }
+
+/* 1 naslovnica */
+.brand { left: 120px; top: 92px; display: flex; align-items: center; gap: 18px; font-size: 28px; color: var(--sub); }
+.brand svg { width: 58px; height: 58px; color: var(--leaf); }
+.cover h1 { left: 112px; top: 264px; font-size: 164px; line-height: .94; letter-spacing: -.03em; }
+.cover .promise { left: 120px; top: 618px; width: 690px; font-size: 48px; line-height: 1.22; }
+.cover .challenge { left: 120px; top: 846px; width: 660px; font-size: 28px; color: var(--sub); }
+.traces { left: 884px; top: 170px; width: 966px; height: 750px; }
+.traces figure { position: absolute; }
+.traces .then { left: 0; top: 0; width: 420px; }
+.traces .now { right: 0; bottom: 0; width: 586px; }
+.traces svg { width: 100%; height: auto; }
+.traces figcaption { font-size: 27px; line-height: 1.3; color: var(--sub); }
+.traces .then figcaption { margin-top: 16px; text-align: center; }
+.traces .now figcaption { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.traces b { display: block; color: var(--fg); font-size: 34px; }
+
+/* 2 scenarij */
+.scenario h2 { left: 120px; top: 120px; width: 760px; }
+.person { left: 120px; top: 372px; width: 700px; font-size: 38px; }
+.why { left: 120px; top: 576px; width: 700px; }
+.users { left: 120px; top: 772px; width: 700px; display: grid; gap: 14px; font-size: 30px; line-height: 1.35; }
+.users li { display: grid; grid-template-columns: 190px 1fr; }
+.users b { color: var(--green-ink); }
+.calendar { left: 948px; top: 108px; width: 852px; padding: 44px 48px 36px; border-radius: 28px; background: var(--white); }
+.calendar h3 { margin-bottom: 28px; }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; padding: 0; list-style: none; }
+.days li {
+  height: 92px; padding: 5px 11px; border-radius: 12px; background: var(--page);
+  font-size: 50px; font-weight: 700; line-height: 1; color: var(--slate);
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.days small { font-size: 18px; font-weight: 500; color: var(--muted); }
+.days strong { align-self: flex-end; }
+.days .other { color: var(--muted); }
+.days .other strong { font-weight: 400; }
+.days .today { background: var(--deep); color: var(--white); }
+.days .today small { color: var(--on-deep); }
+.days .blank { background: none; }
+.calendar .note { margin-top: 22px; }
+
+/* 3 koncept */
+.concept h2 { left: 120px; top: 120px; width: 600px; }
+.concept .lead { left: 120px; top: 348px; width: 560px; font-size: 36px; }
+.functions { left: 120px; top: 586px; width: 550px; display: grid; gap: 20px; font-size: 29px; line-height: 1.32; }
+.concept .note { left: 120px; top: 866px; width: 590px; font-size: 24px; }
+.functions b { display: block; color: var(--green-ink); }
+.chart { left: 728px; top: 112px; width: 1112px; }
+.chart svg { width: 100%; height: auto; }
+.chart text { font: 500 25px "Hanken Grotesk", sans-serif; fill: var(--muted); }
+.chart .title { font-size: 31px; font-weight: 700; fill: var(--ink); }
+.chart .warn { fill: var(--amber); font-weight: 700; }
+.chart .value { font-size: 52px; font-weight: 700; fill: var(--ink); }
+
+/* 4 podatki */
+.data h2 { left: 120px; top: 112px; width: 1680px; }
+.data .lead { left: 120px; top: 232px; width: 1680px; color: var(--sub); }
+.inputs { left: 120px; top: 338px; width: 1680px; height: 472px; display: grid; grid-template-columns: 440px 500px 1fr; background: var(--white); border-radius: 28px; }
+.inputs > li { padding: 40px 38px; display: flex; flex-direction: column; }
+.inputs > li + li { border-left: 2px solid var(--line); }
+.inputs p { margin-top: 8px; font-size: 27px; line-height: 1.35; color: var(--muted); }
+.visual { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.scale { margin-top: 18px; }
+.scale span { display: block; margin-bottom: 10px; font-size: 25px; font-weight: 600; }
+.scale ol { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; list-style: none; padding: 0; }
+.scale li { aspect-ratio: 1; display: grid; place-items: center; border: 2px solid #8aa5b5; border-radius: 50%; font-size: 17px; color: var(--slate); }
+.scale .on { background: var(--slate); border-color: var(--slate); color: var(--white); font-weight: 700; }
+.shapes { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; padding: 0 26px; }
+.shapes svg:first-child { grid-column: 1 / -1; width: 62%; margin: 8px auto 0; }
+.shapes svg { width: 100%; height: auto; }
+.visual img { width: 100%; height: auto; border-radius: 16px; }
+.record { left: 120px; top: 850px; width: 1680px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 64px; font-size: 26px; line-height: 1.35; color: var(--muted); }
+.record b { display: block; color: var(--ink); font-size: 30px; }
+
+/* 5–7 prototip v gibanju */
+.demo h2 { left: 120px; top: 64px; width: 1680px; font-size: 84px; }
+.demo .aside { left: 120px; top: 208px; width: 298px; height: 756px; display: flex; flex-direction: column; gap: 30px; font-size: 31px; line-height: 1.32; }
+.demo .aside b { display: block; margin-bottom: 4px; color: var(--sub); }
+.demo .aside .note { margin-top: auto; }
+.film { left: 456px; top: 208px; width: 1344px; height: 756px; overflow: hidden; border-radius: 24px; background: var(--page); }
+.film video { display: block; width: 100%; height: 100%; object-fit: contain; cursor: pointer; }
+.film img { display: none; }
+
+/* 8 vpeljava */
+.adoption h2 { left: 120px; top: 112px; width: 1120px; }
+.reach { left: 1310px; top: 120px; width: 490px; color: var(--muted); font-size: 27px; }
+.reach b { color: var(--ink); }
+.route { left: 120px; top: 378px; width: 1680px; height: 252px; display: grid; grid-template-columns: 1fr 120px 1fr 120px 1fr; align-items: center; }
+.node { height: 100%; padding: 30px 36px; border-radius: 28px; background: var(--white); display: flex; flex-direction: column; justify-content: center; }
+.node b { font-size: 44px; line-height: 1.12; }
+.node p { margin-top: 12px; font-size: 27px; line-height: 1.3; color: var(--muted); }
+.node.core { background: var(--deep); color: var(--white); }
+.node.core p { color: var(--on-deep); }
+.link { width: 100%; height: 30px; color: var(--slate); }
+.reasons { left: 120px; top: 690px; width: 1680px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 120px; font-size: 28px; line-height: 1.35; }
+.reasons b { display: block; margin-bottom: 6px; color: var(--green-ink); font-size: 32px; }
+.adoption .note { left: 120px; top: 910px; width: 1680px; }
+
+/* 9 zaključek */
+.close h2 { left: 120px; top: 136px; width: 1680px; font-size: 112px; }
+.span { left: 120px; top: 492px; width: 1680px; }
+.span svg { width: 100%; height: auto; }
+.span .ends { display: flex; justify-content: space-between; margin-top: 20px; font-size: 30px; color: var(--sub); }
+.span .ends b { color: var(--sun); }
+.facts { left: 120px; top: 728px; width: 1100px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; font-size: 27px; line-height: 1.38; color: var(--sub); }
+.facts b { display: block; color: var(--fg); font-size: 30px; margin-bottom: 6px; }
+.team { left: 1330px; top: 728px; width: 470px; text-align: right; font-size: 30px; color: var(--sub); }
+.team b { display: block; color: var(--fg); font-size: 44px; line-height: 1.2; }
+
+/* Navigacija po petih točkah naročnika */
+.chrome { display: none; }
+
+/* Način predstavitve */
+@media screen and (min-aspect-ratio: 1/1) {
+  .js, .js body { height: 100%; overflow: hidden; }
+  .js .slide {
+    position: fixed; left: 50%; top: 50%; visibility: hidden;
+    transform: translate(-50%, -50%) scale(var(--s, 1));
+  }
+  .js .slide.active { visibility: visible; }
+  .js .chrome {
+    position: fixed; left: 50%; top: 50%; z-index: 2; width: 1920px; height: 1080px;
+    display: block; pointer-events: none; color: var(--ink);
+    transform: translate(-50%, -50%) scale(var(--s, 1));
+  }
+  .js .chrome.light { color: var(--white); }
+  .chrome nav { position: absolute; left: 120px; bottom: 34px; display: flex; gap: 12px; pointer-events: auto; }
+  .chrome nav a { padding: 8px 16px; border-radius: 8px; color: inherit; font-size: 22px; line-height: 1.2; text-decoration: none; }
+  .chrome nav a:first-child { margin-left: -16px; }
+  .chrome nav a:hover { text-decoration: underline; text-underline-offset: 6px; }
+  .chrome nav a[aria-current] { color: var(--white); background: var(--deep); font-weight: 700; }
+  .chrome.light nav a[aria-current] { color: var(--deep); background: var(--white); }
+  .chrome .status { position: absolute; right: 120px; bottom: 42px; display: flex; gap: 32px; font-size: 22px; line-height: 1.2; }
+
+  /* Edini animirani trenutek: črta, ki jo nariše roka. */
+  @media (prefers-reduced-motion: no-preference) {
+    .js .active .draw { stroke-dasharray: 1; animation: draw 2.4s var(--ease) .25s both; }
+  }
+}
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+/* Pokončni zaslon: isto gradivo kot stran za branje */
+@media screen and (max-aspect-ratio: 999/1000) {
+  body { font-size: 18px; }
+  .slide { width: 100%; height: auto; padding: 56px 20px; display: flex; flex-direction: column; gap: 24px; }
+  .slide > *:not(.sr) { position: static !important; width: 100% !important; height: auto !important; }
+  .slide h2, .close h2 { font-size: clamp(34px, 10vw, 60px); }
+  .slide h3, .reasons b { font-size: 21px; }
+  .slide .lead, .person, .slide .users, .functions, .reasons, .demo .aside { font-size: 18px; }
+  .slide .note, .record, .reach, .inputs p, .facts, .team { font-size: 16px; }
+  .record b, .facts b { font-size: 18px; }
+  .cover h1 { font-size: clamp(48px, 16vw, 92px); }
+  .cover .promise { font-size: 24px; }
+  .cover .challenge, .brand { font-size: 16px; }
+  .brand svg { width: 40px; height: 40px; }
+  .cover .traces { display: grid; grid-template-columns: 2fr 3fr; align-items: center; gap: 12px; }
+  .traces figure, .traces .now figcaption { position: static; }
+  .traces .then, .traces .now { width: auto; }
+  .traces .now figcaption { display: block; margin-top: 10px; }
+  .traces figcaption { font-size: 14px; }
+  .traces b { font-size: 16px; }
+  .users li { grid-template-columns: 1fr; }
+  .calendar { padding: 22px 14px; border-radius: 20px; }
+  .days { gap: 4px; }
+  .days li { height: 46px; padding: 3px 4px; border-radius: 6px; font-size: 21px; }
+  .days small { font-size: 10px; }
+  .chart text, .chart .title { font-size: 40px; }
+  .chart .optional { display: none; }
+  .inputs, .record, .reasons, .facts { grid-template-columns: 1fr; gap: 20px; }
+  .inputs { gap: 0; border-radius: 20px; }
+  .inputs > li { padding: 24px 18px; }
+  .inputs > li + li { border-left: 0; border-top: 2px solid var(--line); }
+  .visual { padding-top: 16px; }
+  .scale span { font-size: 16px; }
+  .scale li { font-size: 12px; }
+  .film { border-radius: 14px; }
+  .film video { height: auto; aspect-ratio: 16 / 9; }
+  .demo .aside { gap: 14px; }
+  .slide::after { content: "Sintetični podatki"; font-size: 13px; color: var(--sub); }
+  .route { grid-template-columns: 1fr; }
+  .node { height: auto; padding: 22px; border-radius: 20px; }
+  .node b { font-size: 25px; }
+  .node p { font-size: 16px; }
+  .link { width: 60px; height: 50px; justify-self: center; transform: rotate(90deg); }
+  .span .ends { font-size: 15px; gap: 16px; }
+  .team { text-align: left; }
+  .team b { font-size: 26px; }
+}
+
+/* Rezervna kopija: Natisni > Shrani kot PDF */
+@page { size: 1920px 1080px; margin: 0; }
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { break-inside: avoid; break-after: page; }
+  .slide:last-of-type { break-after: auto; }
+  .film video { display: none; }
+  .film img { display: block; width: 100%; height: 100%; }
+  .slide::after { content: "Sintetični podatki"; position: absolute; right: 120px; bottom: 36px; font-size: 22px; color: var(--sub); }
+}

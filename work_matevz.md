@@ -160,3 +160,27 @@
 **Preverjeno:** tsc, 94 frontend testov, build; posnetki zaslona v več fazah pri 1440×900 in 390×844 v pravem čarovniku, brez vklopa kamere. Gibanja v živo nisem gledal, samo posamezne faze.
 **Znana šibkost:** pri »Dvig rok« so vmesne faze (roki kažeta proti kameri) na mirujoči sliki dvoumne; možna zamenjava je pogled s strani.
 **Kako zavreči:** `git switch matevz/camera`; veja `matevz/camera` animacij nima.
+
+## 2026-11-22 (07.06) — Statična predstavitev (branch `matevz/demo-predstavitev`)
+
+**Narejeno:** `predstavitev/`: 9 diapozitivov za 3 minute po petih točkah iz Ixtlanovega PDF (scenarij, koncept, zbiranje podatkov, prototip, vpeljava), ena zgodba (Ivan Zupan). Čisti HTML, CSS in JS brez gradnje in zunanjih virov; objavi se mapa `predstavitev/`.
+**Upravljanje:** puščice, preslednica ali daljinec; `F` cel zaslon; `#5` odpre diapozitiv; na pokončnem telefonu je stran za branje; Natisni → PDF je rezerva.
+**Ključno naučeno:**
+- Zasloni in grafi so iz izolirane kopije aplikacije (ponastavitev, površen samopregled pri Ivanu, 22. 11.): 14,1 točke pod izhodiščem, 35 od 40 dni počutje 7. Če se seed ali pravila spremenijo, jih je treba posodobiti.
+- Integracija z zVEM / zVEM+, svojci, patronaža in osebni zdravnik so označeni kot predlog, ne kot narejeno.
+- Posnetki z obrazom niso vključeni, ker bo stran javna.
+**Odločil agent, potrdi Matevž:** podpis »Matevž in Primož«, naslednji korak »prostovoljci, nato pilot z enim oddelkom«, brez Ixtlanovega logotipa.
+**Preverjeno:** Chrome, WebKit in Firefox (brez okna), 5 velikosti zaslona, telefon 390 in 360 px, gostovanje v podmapi, PDF 9 strani; testi 133 backend + 94 frontend. Neodvisen pregled: najdbe popravljene; zadnjih besedilnih popravkov recenzent ni več videl.
+**Ni preverjeno:** projektor in prenosnik za nastop, prava objava, vaje s pravo kamero. `index.html` se odslej ureja ročno (generator grafov je bil enkraten).
+
+## 2026-11-22 (09.20) — Videi aplikacije (branch `matevz/demo-predstavitev`)
+
+**Odločitve (Matevž):** Primožev posnetek z obrazom (nadomesti prejšnje »brez obraza«); kratki videi v predstavitvi in celotni posebej; samo lokalni commit; zamrznitev ob 11.00 ne velja.
+**Narejeno:** diapozitivi 5–7 so videi: sledenje 16 s, kamera 19 s, zdravnik 20 s (začnejo se sami; klik ali `V` ustavi oziroma ponovi). Celotni so v `posnetki/`: 45 s, 2 min 22 s, 53 s. H.264 1080p brez zvoka.
+**Kako so nastali:** izolirana kopija aplikacije s svojo bazo, Ivan Zupan, prava zaznava in točkovanje. Namesto kamere Primoževi posnetki z `origin/compvis`: `202548` (Dlan 95,1), `202912` (Roke v stran 100), `203103` (Dvig rok 42,8). Sledenje je namenoma slabše: −14,1, »Za pregled«. Med kadriranjem in odštevanjem se predvaja začetek istega posnetka naprej in nazaj.
+**Najdeno, NI popravljeno:**
+- Kadriranje vaj z rokami zahteva vidna oba komolca (`games/camera/pick.ts`). Pri rokah ob telesu tega v prvi sekundi ne doseže 6 od 7 Primoževih posnetkov: vaja se lahko v živo ne začne, dokler pacient rok malo ne dvigne.
+- Dnevnik ukrepov piše »dr. Ana Novak je zaprl / potrdil« (moški spol), vidno tudi v videu.
+- Po zaprtju opozorila je Ivan takoj »Stabilno«, čeprav je 14 točk pod izhodiščem.
+- `_load_hook` v `scoring.py`: sočasne prve zahteve po zagonu dobijo nadomestni točkovalnik.
+**Preverjeno:** sličice vseh šestih videov, predvajanje v Chromu, WebKitu in Firefoxu, 5 velikosti zaslona, telefonska postavitev, PDF 9 strani. **Ni preverjeno:** projektor, pravi Safari ali telefon, objava.
