@@ -221,3 +221,9 @@
 **Narejeno:** commitana `predstavitev-google-slides/` (brez začasne `~$` datoteke PowerPointa), združena veja z demo videi (v dnevniku ohranjeni vsi vnosi po času), nato lokalna združitev v `main` prek začasnega worktreeja.
 **Pozor pred pushem:** repozitorij je javen, `UVOZ.md` in vnos ob 10.30 pa pravita, da PPTX, `preview.png` in `kamera.mp4` ne gredo v javno objavo (Primožev obraz). Enak `kamera.mp4` je že javen na `origin/matevz/single-video` v `predstavitev/video/`.
 **Ključno naučeno:** ne preklapljaj glavne mape na vejo brez `predstavitev-google-slides/`, dokler ima PowerPoint odprt PPTX iz nje.
+
+## 2026-11-22 (11.48) — Poročilo za oddajo in povezave v README
+
+**Narejeno:** `temp.md` izvožen v PDF (levo poravnano, modri naslovi); v README povezavi do `IXTLAN-ODDAJA-POROCILO.pdf` in `Turri-report.pdf`.
+**Ključno naučeno:** za izvoz Markdowna v PDF zadoščata Swift in CoreText (npx + Chrome v tej seji ni bil dovoljen).
+**Odprto:** poročilo Ixtlan, README in ta vnos niso commitani; povezava do poročila na GitHubu deluje šele po pushu.
