@@ -101,6 +101,8 @@ import:
   - A failure to import them is logged once and leaves the camera exercises unavailable; the backend and the tracing game keep working.
 - :Implementation: keeps every client meta key of a session, also ones the :Api: does not name (camera sessions send `videoW`, `videoH`, `fpsMeasured`, `detector` and more), passes them to the :Scorer: and stores them with the raw series.
 - :Implementation: keeps a copy of [the tracer levels](resources/tracer_levels.json) as `app/seed/tracer_levels.json` and reads the level paths from it.
+- :Implementation: keeps the demo data modules as exact copies of their resources, every story, curve, constant and parameter included, changing only imports and type hints: `app/seed/stories.py` is [the demo stories](resources/seed_stories.py), `app/seed/traces.py` is [the trace generator](resources/seed_traces.py) (reading the levels from `app/seed/tracer_levels.json`) and `app/seed/camera.py` is [the camera seed](resources/seed_camera.py) (taking the exercise durations from the :CameraModels: through the backend's own camera bridge).
+  - A unit test checks that every :DemoStory: of the resource is there with the same fields, e.g. that `p1`, `p2`, `p3`, `p4`, `p5`, `p6`, `p7` and `p9` have a camera curve and `p8` and `demo` have none.
 - :UnitTests: use FastAPI's `TestClient` and an in-memory SQLite engine per test, with `APP_KEEP_DB=1` and :Today: fixed to 2026-11-21.
 - :UnitTests: run with `APP_SEED_HISTORY=0`, except the tests of the history replay, which replay it once per test module and share that database.
   - The whole unit test suite finishes in under 60 seconds.
@@ -169,7 +171,7 @@ After a scored :GameSession: is stored, the :TrendSnapshot: rows of that patient
 - There is one `<gameType>:all` row holding the :CombinedTrend: (baseline, EWMA, slope and delta percent empty), whose number of sessions is the number of distinct days with a scored session so far. A level not played that day contributes its latest delta, so a self-check still in progress never shows one level as the whole trend.
 
 # divergence
-The divergence of a patient as of a day compares the latest `<game>:all` delta up to that day of each of the :Games: that has one with the change of the patient's wellbeing index. A patient without camera data is judged on tracing alone.
+The divergence of a patient as of a day compares, for each of the :Games:, the delta of its latest `<game>:all` snapshot up to that day (a game whose latest snapshot has an empty delta, or that has none, is left out) with the change of the patient's wellbeing index. A patient without camera data is judged on tracing alone.
 - The wellbeing index of a :Checkin: is the mean of its answered ratings normalised to 0-1 by each question's range, inverted for a question where higher is worse.
 - The change is the mean index of the last 7 days (day - 6 to day) minus the mean of the 7 days before; there is none when either week has no check-in.
 - It diverges when any game's delta is at most -10 and the change is at least -0.05, with the sentence "Rezultati sledenja padajo, pacient pa poroča enako ali boljše počutje." when tracing is the only such game, otherwise "Rezultati meritev padajo, pacient pa poroča enako ali boljše počutje.".
@@ -235,7 +237,7 @@ Patient feedback as of a day uses, for each of the :Games:, its `<game>:all` sna
 
 Each game also has its own progress, `games`: one entry per game with at least one `<gameType>:all` snapshot with a delta up to :Today:, tracing first, each exactly `gameType`, `title` ("Sledenje" for trace, "Vaje s kamero" for camera), `trend` (that game's trend), `points` and `personalBestDay` (the day of its highest delta over the whole history, ties to the later day).
 
-`GET /api/patients/{patientId}/selfcheck/summary` returns exactly `tone`, `trend`, `title`, `text` (the feedback for :Today:, flat, not nested), `patientId`, `day` (:Today:), `levelsDone` (game steps of all games done today), `levelsTotal` (game steps in total) and `games` (each with the points of the last 14 days, :Today: included).
+`GET /api/patients/{patientId}/selfcheck/summary` returns exactly `tone`, `trend`, `title`, `text` (the feedback for :Today:, flat, not nested), `patientId`, `day` (:Today:), `levelsDone` (game steps of all games done today), `levelsTotal` (game steps in total) and `games` (the same full entries as `games` of the progress, each with exactly `gameType`, `title`, `trend`, `points` and `personalBestDay`, except that `points` holds only the points of the last 14 days, :Today: included).
 
 `GET /api/patients/{patientId}/progress` returns exactly `tone`, `trend`, `title`, `text` (flat), `patientId`, `games` (each with all its points), `ratings` (each check-in up to :Today: as `day`, `wellbeing`, `pain`), `weekDone` (days with any entry in the last 7 days), `weekGoal` (5) and `clinicianReviewedAt` (the latest acknowledgement time of any of the patient's alerts, or null).
 - A point has exactly `day`, `value` (its delta rounded to 1 decimal) and `label`: `lower` at <= -5, `better` at >= 5, else `usual`.
