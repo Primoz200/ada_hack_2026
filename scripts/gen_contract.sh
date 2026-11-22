@@ -4,7 +4,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-uv run --project backend python scripts/export_openapi.py
+uv run --project backend_turri python scripts/export_openapi.py
 # openapi-typescript needs TypeScript 5 (the app uses 7), so it runs outside the project.
 (cd "${TMPDIR:-/tmp}" && npx -y -p typescript@5 -p openapi-typescript@7 openapi-typescript \
   "$ROOT/contracts/openapi.json" -o "$ROOT/frontend/src/client/schema.d.ts")
